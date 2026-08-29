@@ -82,7 +82,6 @@ with tabs[0]:
         
         if submit:
             if cikkszam and nev and tarhely:
-                # Vonalkód alapértelmezés ha üresen hagyták
                 v_kod = vonalkod_szam if vonalkod_szam else cikkszam
                 
                 c.execute("SELECT SUM(mennyiseg) FROM keszlet WHERE tarhely = ?", (tarhely,))
@@ -236,7 +235,7 @@ with tabs[2]:
                 st.write(f"**{c_name}**")
                 st.caption(f"Cikkszám: {c_code} | Vonalkód: {v_code}")
                 if vk_img:
-                    st.image(vk_img, use_column_width=True)
+                    st.image(vk_img, use_container_width=True)
                     st.download_button(
                         label=f"💾 Vonalkód letöltése",
                         data=vk_img.getvalue(),
