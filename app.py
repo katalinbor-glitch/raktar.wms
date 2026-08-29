@@ -15,36 +15,19 @@ c.execute('''CREATE TABLE IF NOT EXISTS naplo
              (id INTEGER PRIMARY KEY AUTOINCREMENT, datum TEXT, tipus TEXT, cikkszam TEXT, nev TEXT, mennyiseg INTEGER, egyseg TEXT, tarhely TEXT)''')
 conn.commit()
 
-# Adatbázis sémakorrekciók
-try:
-    c.execute("ALTER TABLE keszlet ADD COLUMN egyseg TEXT DEFAULT 'db'")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
-
-try:
-    c.execute("ALTER TABLE keszlet ADD COLUMN egysegar REAL DEFAULT 0.0")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
-
-try:
-    c.execute("ALTER TABLE keszlet ADD COLUMN bizt_keszlet INTEGER DEFAULT 20")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
-
-try:
-    c.execute("ALTER TABLE keszlet ADD COLUMN rend_keszlet INTEGER DEFAULT 30")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
-
-try:
-    c.execute("ALTER TABLE naplo ADD COLUMN egyseg TEXT DEFAULT 'db'")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
+# Adatbázis sémakorrekciók (ha még nem léteznének az oszlopok)
+for query in [
+    "ALTER TABLE keszlet ADD COLUMN egyseg TEXT DEFAULT 'db'",
+    "ALTER TABLE keszlet ADD COLUMN egysegar REAL DEFAULT 0.0",
+    "ALTER TABLE keszlet ADD COLUMN bizt_keszlet INTEGER DEFAULT 20",
+    "ALTER TABLE keszlet ADD COLUMN rend_keszlet INTEGER DEFAULT 30",
+    "ALTER TABLE naplo ADD COLUMN egyseg TEXT DEFAULT 'db'"
+]:
+    try:
+        c.execute(query)
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 # Előre definiált opciók
 TARHELYEK = [
@@ -82,7 +65,9 @@ with tabs[0]:
         if submit:
             if cikkszam and nev and tarhely:
                 c.execute("SELECT SUM(mennyiseg) FROM keszlet WHERE tarhely = ?", (tarhely,))
-                jelenlegi_tarhely_db = c.fetchone()[0] or 0
+                res = c.fetchone()
+                jelenlegi_tarhely_db = res[0] if res and res[0] else 0
+                
                 if jelenlegi_tarhely_db + mennyiseg > 100:
                     st.warning(f"⚠️ Figyelem! A(z) {tarhely} tárhelyen a bevételezés után {jelenlegi_tarhely_db + mennyiseg} termék lesz (100 feletti kapacitás!).")
 
@@ -121,33 +106,33 @@ with tabs[1]:
         if st.button("📤 Kiadás rögzítése"):
             c.execute("SELECT mennyiseg, nev, egyseg, tarhely, bizt_keszlet, rend_keszlet FROM keszlet WHERE cikkszam = ?", (kivalasztott_cikkszam,))
             k_rekord = c.fetchone()
-            jelnlegi = k_rekord[0]
-            nev = k_rekord[1]
-            egyseg = k_rekord[2]
-            tarhely = k_rekord[3]
-            bizt = k_rekord[4] or 20
-            rend = k_rekord[5] or 30
-            
-            if kiadas_mennyiseg > jelnlegi:
-                st.error("❌ Nincs elegendő készlet a raktárban!")
-            else:
-                új_mennyiség = jelnlegi - kiadas_mennyiseg
-                c.execute("UPDATE keszlet SET mennyiseg = ? WHERE cikkszam = ?", (új_mennyiség, kivalasztott_cikkszam))
+            if k_rekord:
+                jelnlegi = k_rekord[0]
+                nev = k_rekord[1]
+                egyseg = k_rekord[2]
+                tarhely = k_rekord[3]
+                bizt = k_rekord[4] if k_rekord[4] is not None else 20
+                rend = k_rekord[5] if k_rekord[5] is not None else 30
                 
-                most = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                c.execute("INSERT INTO naplo (datum, tipus, cikkszam, nev, mennyiseg, egyseg, tarhely) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                          (most, "KIADÁS", kivalasztott_cikkszam, nev, kiadas_mennyiseg, egyseg, tarhely))
-                conn.commit()
-                
-                st.success(f"✅ Sikeres kiadás: {nev} ({kiadas_mennyiseg} {egyseg})")
-                
-                # Figyelmeztetések az egyedi készletszintekről
-                if új_mennyiség <= bizt:
-                    st.error(f"🚨 KRITIKUS KÉSZLET: A(z) {nev} elérte vagy átlépte az egyedi biztonsági készlet szintjét ({bizt} {egyseg})! Jelenlegi: {új_mennyiség} {egyseg}.")
-                elif új_mennyiség <= rend:
-                    st.warning(f"⚠️ RENDELÉS SZÜKSÉGES: A(z) {nev} elérte az egyedi rendelésköteles készlet szintjét ({rend} {egyseg})! Jelenlegi: {új_mennyiség} {egyseg}.")
-                
-                st.rerun()
+                if kiadas_mennyiseg > jelnlegi:
+                    st.error("❌ Nincs elegendő készlet a raktárban!")
+                else:
+                    új_mennyiség = jelnlegi - kiadas_mennyiseg
+                    c.execute("UPDATE keszlet SET mennyiseg = ? WHERE cikkszam = ?", (új_mennyiség, kivalasztott_cikkszam))
+                    
+                    most = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    c.execute("INSERT INTO naplo (datum, tipus, cikkszam, nev, mennyiseg, egyseg, tarhely) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                              (most, "KIADÁS", kivalasztott_cikkszam, nev, kiadas_mennyiseg, egyseg, tarhely))
+                    conn.commit()
+                    
+                    st.success(f"✅ Sikeres kiadás: {nev} ({kiadas_mennyiseg} {egyseg})")
+                    
+                    if új_mennyiség <= bizt:
+                        st.error(f"🚨 KRITIKUS KÉSZLET: A(z) {nev} elérte vagy átlépte a biztonsági készletet ({bizt} {egyseg})! Jelenlegi: {új_mennyiség} {egyseg}.")
+                    elif új_mennyiség <= rend:
+                        st.warning(f"⚠️ RENDELÉS SZÜKSÉGES: A(z) {nev} elérte a rendelésköteles készletet ({rend} {egyseg})! Jelenlegi: {új_mennyiség} {egyseg}.")
+                    
+                    st.rerun()
     else:
         st.info("ℹ️ Jelenleg nincs kiadható készlet a raktárban.")
 
@@ -172,11 +157,10 @@ with tabs[2]:
     df_keszlet = pd.read_sql_query(query, conn)
     
     if not df_keszlet.empty:
-        df_keszlet['Egységár (Ft)'] = df_keszlet['Egységár (Ft)'].fillna(0)
+        df_keszlet['Egységár (Ft)'] = df_keszlet['Egységár (Ft)'].fillna(0.0)
         df_keszlet['Mennyiség'] = df_keszlet['Mennyiség'].fillna(0)
         df_keszlet['Összérték (Ft)'] = df_keszlet['Mennyiség'] * df_keszlet['Egységár (Ft)']
         
-        # Logisztikai státusz kiszámítása az egyedi értékek alapján
         def keszlet_statusz(sor):
             m = sor['Mennyiség']
             b = sor['Biztonsági Készlet'] if pd.notnull(sor['Biztonsági Készlet']) else 20
@@ -200,9 +184,10 @@ with tabs[2]:
         
         st.dataframe(df_keszlet, use_container_width=True)
         
-        teljes_ertek = float(df_keszlet['Összérték (Ft)'].sum())
-        ertek_formazott = f"{teljes_ertek:,.0f}".replace(",", " ")
-        st.metric(label="💰 Teljes Raktárkészlet Értéke", value=f"{ertek_formazott} Ft")
+        # Hibamentes összegszámítás és megjelenítés
+        osszertek = int(df_keszlet['Összérték (Ft)'].sum())
+        ertek_szoveg = f"{osszertek:,}".replace(",", " ")
+        st.metric(label="Teljes Raktárkészlet Értéke", value=str(ertek_szoveg) + " Ft")
         
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
