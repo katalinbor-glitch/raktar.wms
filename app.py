@@ -3,6 +3,8 @@ import pandas as pd
 import sqlite3
 import datetime
 import io
+import barcode
+from barcode.writer import ImageWriter
 
 # Adatbázis kapcsolat
 conn = sqlite3.connect('raktar.db', check_same_thread=False)
@@ -15,12 +17,12 @@ c.execute('''CREATE TABLE IF NOT EXISTS naplo
              (id INTEGER PRIMARY KEY AUTOINCREMENT, datum TEXT, tipus TEXT, cikkszam TEXT, nev TEXT, mennyiseg INTEGER, egyseg TEXT, tarhely TEXT)''')
 conn.commit()
 
-# Adatbázis sémakorrekciók (ha még nem léteznének az oszlopok)
+# Adatbázis sémakorrekciók
 for query in [
     "ALTER TABLE keszlet ADD COLUMN egyseg TEXT DEFAULT 'db'",
     "ALTER TABLE keszlet ADD COLUMN egysegar REAL DEFAULT 0.0",
-    "ALTER TABLE keszlet ADD COLUMN bizt_keszlet INTEGER DEFAULT 20",
-    "ALTER TABLE keszlet ADD COLUMN rend_keszlet INTEGER DEFAULT 30",
+    "ALTER TABLE keszlet ADD COLUMN bizt_keszlet INTEGER DEFAULT 10",
+    "ALTER TABLE keszlet ADD COLUMN rend_keszlet INTEGER DEFAULT 20",
     "ALTER TABLE naplo ADD COLUMN egyseg TEXT DEFAULT 'db'"
 ]:
     try:
@@ -28,6 +30,18 @@ for query in [
         conn.commit()
     except sqlite3.OperationalError:
         pass
+
+# Vonalkód generáló segédfüggvény
+def generel_vonalkod(cikkszam):
+    try:
+        CODE128 = barcode.get_barcode_class('code128')
+        rv = io.BytesIO()
+        code = CODE128(str(cikkszam), writer=ImageWriter())
+        code.write(rv)
+        rv.seek(0)
+        return rv
+    except Exception:
+        return None
 
 # Előre definiált opciók
 TARHELYEK = [
@@ -50,15 +64,15 @@ with tabs[0]:
     with st.form("bevetel_form"):
         col1, col2 = st.columns(2)
         with col1:
-            cikkszam = st.text_input("🏷️ Cikkszám (pl. CIKK-001)")
+            cikkszam = st.text_input("🏷️ Cikkszám / Vonalkód kódja (pl. CIKK-001)")
             nev = st.text_input("📦 Termék neve")
             egysegar = st.number_input("💵 Egységár (Ft)", min_value=0.0, step=100.0, value=1000.0)
             tarhely = st.selectbox("📍 Tárhely kiválasztása", TARHELYEK)
         with col2:
             mennyiseg = st.number_input("🔢 Mennyiség", min_value=1, step=1)
             egyseg = st.selectbox("📏 Mennyiségi egység", EGYSÉGEK)
-            bizt_keszlet = st.number_input("🚨 Egyedi Biztonsági Készlet", min_value=0, value=20, step=1)
-            rend_keszlet = st.number_input("⚠️ Egyedi Rendelésköteles Készlet", min_value=0, value=30, step=1)
+            bizt_keszlet = st.number_input("🚨 Biztonsági Készlet", min_value=0, value=10, step=1)
+            rend_keszlet = st.number_input("⚠️ Rendelésköteles Készlet", min_value=0, value=20, step=1)
         
         submit = st.form_submit_button("📥 Bevételezés rögzítése")
         
@@ -78,7 +92,7 @@ with tabs[0]:
                     c.execute("UPDATE keszlet SET mennyiseg = ?, egyseg = ?, tarhely = ?, egysegar = ?, bizt_keszlet = ?, rend_keszlet = ? WHERE cikkszam = ?", 
                               (új_mennyiség, egyseg, tarhely, egysegar, bizt_keszlet, rend_keszlet, cikkszam))
                 else:
-                    c.execute("INSERT INTO keszlet VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                    c.execute("INSERT INTO keszlet (cikkszam, nev, tarhely, mennyiseg, egyseg, egysegar, bizt_keszlet, rend_keszlet) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
                               (cikkszam, nev, tarhely, mennyiseg, egyseg, egysegar, bizt_keszlet, rend_keszlet))
                 
                 most = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -111,8 +125,8 @@ with tabs[1]:
                 nev = k_rekord[1]
                 egyseg = k_rekord[2]
                 tarhely = k_rekord[3]
-                bizt = k_rekord[4] if k_rekord[4] is not None else 20
-                rend = k_rekord[5] if k_rekord[5] is not None else 30
+                bizt = k_rekord[4] if k_rekord[4] is not None else 10
+                rend = k_rekord[5] if k_rekord[5] is not None else 20
                 
                 if kiadas_mennyiseg > jelnlegi:
                     st.error("❌ Nincs elegendő készlet a raktárban!")
@@ -136,9 +150,9 @@ with tabs[1]:
     else:
         st.info("ℹ️ Jelenleg nincs kiadható készlet a raktárban.")
 
-# 3. PILLANATNYI KÉSZLET
+# 3. PILLANATNYI KÉSZLET & VONALKÓDOK
 with tabs[2]:
-    st.header("📋 Pillanatnyi Készlet")
+    st.header("📋 Pillanatnyi Készlet és Vonalkódok")
     
     kereses = st.text_input("🔍 Keresés (Cikkszám, Név vagy Tárhely alapján):")
     
@@ -163,8 +177,8 @@ with tabs[2]:
         
         def keszlet_statusz(sor):
             m = sor['Mennyiség']
-            b = sor['Biztonsági Készlet'] if pd.notnull(sor['Biztonsági Készlet']) else 20
-            r = sor['Rendelésköteles Készlet'] if pd.notnull(sor['Rendelésköteles Készlet']) else 30
+            b = sor['Biztonsági Készlet'] if pd.notnull(sor['Biztonsági Készlet']) else 10
+            r = sor['Rendelésköteles Készlet'] if pd.notnull(sor['Rendelésköteles Készlet']) else 20
             
             if m <= b:
                 return '🚨 Biztonsági szint alatt!'
@@ -184,7 +198,6 @@ with tabs[2]:
         
         st.dataframe(df_keszlet, use_container_width=True)
         
-        # Hibamentes összegszámítás és megjelenítés
         osszertek = int(df_keszlet['Összérték (Ft)'].sum())
         ertek_szoveg = f"{osszertek:,}".replace(",", " ")
         st.metric(label="Teljes Raktárkészlet Értéke", value=str(ertek_szoveg) + " Ft")
@@ -198,6 +211,30 @@ with tabs[2]:
             file_name="raktar_keszlet.xlsx",
             mime="application/vnd.ms-excel"
         )
+
+        st.markdown("---")
+        st.subheader("🏷️ Cikkek vonalkódjai")
+        
+        cols = st.columns(3)
+        for i, index_row in enumerate(df_keszlet.iterrows()):
+            row = index_row[1]
+            c_code = str(row['Cikkszám'])
+            c_name = str(row['Név'])
+            
+            vk_img = generel_vonalkod(c_code)
+            with cols[i % 3]:
+                st.write(f"**{c_name}** ({c_code})")
+                if vk_img:
+                    st.image(vk_img, use_column_width=True)
+                    st.download_button(
+                        label=f"💾 Vonalkód letöltése ({c_code})",
+                        data=vk_img.getvalue(),
+                        file_name=f"vonalkod_{c_code}.png",
+                        mime="image/png",
+                        key=f"dl_{c_code}_{i}"
+                    )
+                else:
+                    st.error("Nem sikerült vonalkódot generálni.")
     else:
         st.info("ℹ️ A raktár jelenleg üres.")
 
