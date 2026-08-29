@@ -12,13 +12,14 @@ c = conn.cursor()
 
 # Táblák létrehozása
 c.execute('''CREATE TABLE IF NOT EXISTS keszlet 
-             (cikkszam TEXT PRIMARY KEY, nev TEXT, tarhely TEXT, mennyiseg INTEGER, egyseg TEXT, egysegar REAL, bizt_keszlet INTEGER, rend_keszlet INTEGER)''')
+             (cikkszam TEXT PRIMARY KEY, vonalkod TEXT, nev TEXT, tarhely TEXT, mennyiseg INTEGER, egyseg TEXT, egysegar REAL, bizt_keszlet INTEGER, rend_keszlet INTEGER)''')
 c.execute('''CREATE TABLE IF NOT EXISTS naplo 
              (id INTEGER PRIMARY KEY AUTOINCREMENT, datum TEXT, tipus TEXT, cikkszam TEXT, nev TEXT, mennyiseg INTEGER, egyseg TEXT, tarhely TEXT)''')
 conn.commit()
 
 # Adatbázis sémakorrekciók
 for query in [
+    "ALTER TABLE keszlet ADD COLUMN vonalkod TEXT DEFAULT ''",
     "ALTER TABLE keszlet ADD COLUMN egyseg TEXT DEFAULT 'db'",
     "ALTER TABLE keszlet ADD COLUMN egysegar REAL DEFAULT 0.0",
     "ALTER TABLE keszlet ADD COLUMN bizt_keszlet INTEGER DEFAULT 10",
@@ -32,11 +33,13 @@ for query in [
         pass
 
 # Vonalkód generáló segédfüggvény
-def generel_vonalkod(cikkszam):
+def generel_vonalkod(kod_szoveg):
     try:
+        if not kod_szoveg:
+            return None
         CODE128 = barcode.get_barcode_class('code128')
         rv = io.BytesIO()
-        code = CODE128(str(cikkszam), writer=ImageWriter())
+        code = CODE128(str(kod_szoveg), writer=ImageWriter())
         code.write(rv)
         rv.seek(0)
         return rv
@@ -64,11 +67,12 @@ with tabs[0]:
     with st.form("bevetel_form"):
         col1, col2 = st.columns(2)
         with col1:
-            cikkszam = st.text_input("🏷️ Cikkszám / Vonalkód kódja (pl. CIKK-001)")
+            cikkszam = st.text_input("🏷️ Cikkszám (pl. CIKK-001)")
+            vonalkod_szam = st.text_input("🔢 Vonalkód száma (pl. 599123456789)")
             nev = st.text_input("📦 Termék neve")
             egysegar = st.number_input("💵 Egységár (Ft)", min_value=0.0, step=100.0, value=1000.0)
-            tarhely = st.selectbox("📍 Tárhely kiválasztása", TARHELYEK)
         with col2:
+            tarhely = st.selectbox("📍 Tárhely kiválasztása", TARHELYEK)
             mennyiseg = st.number_input("🔢 Mennyiség", min_value=1, step=1)
             egyseg = st.selectbox("📏 Mennyiségi egység", EGYSÉGEK)
             bizt_keszlet = st.number_input("🚨 Biztonsági Készlet", min_value=0, value=10, step=1)
@@ -78,6 +82,9 @@ with tabs[0]:
         
         if submit:
             if cikkszam and nev and tarhely:
+                # Vonalkód alapértelmezés ha üresen hagyták
+                v_kod = vonalkod_szam if vonalkod_szam else cikkszam
+                
                 c.execute("SELECT SUM(mennyiseg) FROM keszlet WHERE tarhely = ?", (tarhely,))
                 res = c.fetchone()
                 jelenlegi_tarhely_db = res[0] if res and res[0] else 0
@@ -89,11 +96,11 @@ with tabs[0]:
                 rekord = c.fetchone()
                 if rekord:
                     új_mennyiség = rekord[0] + mennyiseg
-                    c.execute("UPDATE keszlet SET mennyiseg = ?, egyseg = ?, tarhely = ?, egysegar = ?, bizt_keszlet = ?, rend_keszlet = ? WHERE cikkszam = ?", 
-                              (új_mennyiség, egyseg, tarhely, egysegar, bizt_keszlet, rend_keszlet, cikkszam))
+                    c.execute("UPDATE keszlet SET vonalkod = ?, mennyiseg = ?, egyseg = ?, tarhely = ?, egysegar = ?, bizt_keszlet = ?, rend_keszlet = ? WHERE cikkszam = ?", 
+                              (v_kod, új_mennyiség, egyseg, tarhely, egysegar, bizt_keszlet, rend_keszlet, cikkszam))
                 else:
-                    c.execute("INSERT INTO keszlet (cikkszam, nev, tarhely, mennyiseg, egyseg, egysegar, bizt_keszlet, rend_keszlet) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                              (cikkszam, nev, tarhely, mennyiseg, egyseg, egysegar, bizt_keszlet, rend_keszlet))
+                    c.execute("INSERT INTO keszlet (cikkszam, vonalkod, nev, tarhely, mennyiseg, egyseg, egysegar, bizt_keszlet, rend_keszlet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                              (cikkszam, v_kod, nev, tarhely, mennyiseg, egyseg, egysegar, bizt_keszlet, rend_keszlet))
                 
                 most = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 c.execute("INSERT INTO naplo (datum, tipus, cikkszam, nev, mennyiseg, egyseg, tarhely) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -102,7 +109,7 @@ with tabs[0]:
                 st.success(f"✅ Sikeres bevételezés: {nev} ({mennyiseg} {egyseg})")
                 st.rerun()
             else:
-                st.error("❌ Kérjük, töltsön ki minden mezőt!")
+                st.error("❌ Kérjük, töltsön ki minden kötelező mezőt (Cikkszám, Név, Tárhely)!")
 
 # 2. KIADÁS
 with tabs[1]:
@@ -154,11 +161,12 @@ with tabs[1]:
 with tabs[2]:
     st.header("📋 Pillanatnyi Készlet és Vonalkódok")
     
-    kereses = st.text_input("🔍 Keresés (Cikkszám, Név vagy Tárhely alapján):")
+    kereses = st.text_input("🔍 Keresés (Cikkszám, Vonalkód, Név vagy Tárhely alapján):")
     
     query = """
     SELECT 
         cikkszam AS Cikkszám, 
+        vonalkod AS Vonalkód,
         nev AS Név, 
         tarhely AS Tárhely, 
         mennyiseg AS Mennyiség, 
@@ -171,8 +179,8 @@ with tabs[2]:
     df_keszlet = pd.read_sql_query(query, conn)
     
     if not df_keszlet.empty:
-        df_keszlet['Egységár (Ft)'] = df_keszlet['Egységár (Ft)'].fillna(0.0)
-        df_keszlet['Mennyiség'] = df_keszlet['Mennyiség'].fillna(0)
+        df_keszlet['Egységár (Ft)'] = pd.to_numeric(df_keszlet['Egységár (Ft)'], errors='coerce').fillna(0.0)
+        df_keszlet['Mennyiség'] = pd.to_numeric(df_keszlet['Mennyiség'], errors='coerce').fillna(0)
         df_keszlet['Összérték (Ft)'] = df_keszlet['Mennyiség'] * df_keszlet['Egységár (Ft)']
         
         def keszlet_statusz(sor):
@@ -192,6 +200,7 @@ with tabs[2]:
         if kereses:
             df_keszlet = df_keszlet[
                 df_keszlet['Cikkszám'].astype(str).str.contains(kereses, case=False, na=False) |
+                df_keszlet['Vonalkód'].astype(str).str.contains(kereses, case=False, na=False) |
                 df_keszlet['Név'].astype(str).str.contains(kereses, case=False, na=False) |
                 df_keszlet['Tárhely'].astype(str).str.contains(kereses, case=False, na=False)
             ]
@@ -219,17 +228,19 @@ with tabs[2]:
         for i, index_row in enumerate(df_keszlet.iterrows()):
             row = index_row[1]
             c_code = str(row['Cikkszám'])
+            v_code = str(row['Vonalkód']) if row['Vonalkód'] else c_code
             c_name = str(row['Név'])
             
-            vk_img = generel_vonalkod(c_code)
+            vk_img = generel_vonalkod(v_code)
             with cols[i % 3]:
-                st.write(f"**{c_name}** ({c_code})")
+                st.write(f"**{c_name}**")
+                st.caption(f"Cikkszám: {c_code} | Vonalkód: {v_code}")
                 if vk_img:
                     st.image(vk_img, use_column_width=True)
                     st.download_button(
-                        label=f"💾 Vonalkód letöltése ({c_code})",
+                        label=f"💾 Vonalkód letöltése",
                         data=vk_img.getvalue(),
-                        file_name=f"vonalkod_{c_code}.png",
+                        file_name=f"vonalkod_{v_code}.png",
                         mime="image/png",
                         key=f"dl_{c_code}_{i}"
                     )
