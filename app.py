@@ -4,10 +4,42 @@ import datetime
 
 st.set_page_config(page_title="WMS Raktárirányító Rendszer", layout="wide")
 
-# Konfiguráció - Beállított Admin jelszó
-ADMIN_PIN = "Coca-cola20"
+# Konfiguráció - Beállított jelszavak
+LOGIN_PASSWORD = "wms2026"  # Belépési jelszó a diákoknak / felhasználóknak
+ADMIN_PIN = "Coca-cola20"   # Admin jelszó a törlésekhez és leltárkorrekcióhoz
 
-# 1. INICIALIZÁLÁS (Készlet és Törzsadatok Rendelésköteles Szinttel)
+# 1. BEJELENTKEZÉSI LOGIKA (SESSION STATE)
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔒 WMS Raktárirányító Rendszer - Belépés")
+    st.write("A rendszer használatához kérjük, adja meg a hozzáférési jelszót!")
+    
+    with st.form("login_form"):
+        password_input = st.text_input("Belépési Jelszó", type="password")
+        submit_login = st.form_submit_button("Belépés")
+        
+        if submit_login:
+            if password_input == LOGIN_PASSWORD:
+                st.session_state.authenticated = True
+                st.success("✅ Sikeres belépés!")
+                st.rerun()
+            else:
+                st.error("❌ Helytelen jelszó! Próbáld újra.")
+    
+    st.stop()  # Megállítja a kód futását, így semmi más nem látható belépés előtt
+
+# ==============================================================================
+# ALKALMAZÁS TARTALMA (Csak sikeres belépés után jelenik meg)
+# ==============================================================================
+
+# Kijelentkezés gomb az oldalsáv tetején
+if st.sidebar.button("🚪 Kijelentkezés"):
+    st.session_state.authenticated = False
+    st.rerun()
+
+# 2. INICIALIZÁLÁS (Készlet és Törzsadatok Rendelésköteles Szinttel)
 if "cikktorzs" not in st.session_state:
     st.session_state.cikktorzs = pd.DataFrame([
         {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Vonalkód": "5901234567891", "Biztonsági készlet": 5, "Rendelésköteles készlet": 12},
@@ -356,25 +388,20 @@ elif menu == "📈 ABC Elemzés (Készletérték)":
     if st.session_state.sarzs_keszlet.empty:
         st.warning("⚠️ Nincs készleten lévő áru az elemzés elvégzéséhez!")
     else:
-        # Készletérték számítása cikkekre lebontva
         df_abc = st.session_state.sarzs_keszlet.copy()
         df_abc["Készletérték"] = df_abc["Mennyiség"] * df_abc["Beszerzési Ár"]
         
-        # Összegzés cikkszámonként
         abc_summary = df_abc.groupby(["Cikkszám", "Megnevezés"]).agg(
             Össz_Mennyiség=("Mennyiség", "sum"),
             Össz_Készletérték=("Készletérték", "sum")
         ).reset_index()
         
-        # Csökkenő sorrendbe rendezés érték alapján
         abc_summary = abc_summary.sort_values(by="Össz_Készletérték", ascending=False).reset_index(drop=True)
         
-        # Kumulált érték és százalék számítás
         teljes_raktar_ertek = abc_summary["Össz_Készletérték"].sum()
         abc_summary["Kumulált_Érték"] = abc_summary["Össz_Készletérték"].cumsum()
         abc_summary["Kumulált_%"] = (abc_summary["Kumulált_Érték"] / teljes_raktar_ertek) * 100
         
-        # ABC Besorolási logika
         def besorolas(pct):
             if pct <= 80:
                 return "🔴 'A' Osztály (Szigorú kontroll)"
