@@ -12,7 +12,8 @@ if "cikktorzs" not in st.session_state:
     st.session_state.cikktorzs = pd.DataFrame([
         {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Vonalkód": "5901234567891", "Biztonsági készlet": 5, "Rendelésköteles készlet": 12},
         {"Cikkszám": "ART-002", "Megnevezés": "Egér Logitech MX Master", "Vonalkód": "5901234567892", "Biztonsági készlet": 5, "Rendelésköteles készlet": 15},
-        {"Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Vonalkód": "5901234567893", "Biztonsági készlet": 2, "Rendelésköteles készlet": 6}
+        {"Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Vonalkód": "5901234567893", "Biztonsági készlet": 2, "Rendelésköteles készlet": 6},
+        {"Cikkszám": "ART-004", "Megnevezés": "USB Kábel Type-C", "Vonalkód": "5901234567894", "Biztonsági készlet": 10, "Rendelésköteles készlet": 25}
     ])
 
 if "sarzs_keszlet" not in st.session_state:
@@ -20,7 +21,8 @@ if "sarzs_keszlet" not in st.session_state:
         {"SarzsID": "S-101", "Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Mennyiség": 10, "Tárhely": "A-01-01", "Beérkezés": "2026-01-10", "Lejárat": "2028-01-10", "Beszerzési Ár": 240000},
         {"SarzsID": "S-102", "Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Mennyiség": 5, "Tárhely": "C-03-02", "Beérkezés": "2026-02-01", "Lejárat": "2028-02-01", "Beszerzési Ár": 260000},
         {"SarzsID": "S-201", "Cikkszám": "ART-002", "Megnevezés": "Egér Logitech MX Master", "Mennyiség": 40, "Tárhely": "A-01-02", "Beérkezés": "2026-01-15", "Lejárat": "2027-06-30", "Beszerzési Ár": 32000},
-        {"SarzsID": "S-301", "Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Mennyiség": 8, "Tárhely": "B-02-01", "Beérkezés": "2026-01-20", "Lejárat": "2029-01-01", "Beszerzési Ár": 85000}
+        {"SarzsID": "S-301", "Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Mennyiség": 8, "Tárhely": "B-02-01", "Beérkezés": "2026-01-20", "Lejárat": "2029-01-01", "Beszerzési Ár": 85000},
+        {"SarzsID": "S-401", "Cikkszám": "ART-004", "Megnevezés": "USB Kábel Type-C", "Mennyiség": 100, "Tárhely": "D-01-01", "Beérkezés": "2026-01-05", "Lejárat": "2030-01-01", "Beszerzési Ár": 1500}
     ])
 
 if "naplo" not in st.session_state:
@@ -36,6 +38,7 @@ menu = st.sidebar.radio("Navigáció / Modulok", [
     "📤 Kiadás (Stratégia & Tárhely)", 
     "➕ Új Termék Rögzítése",
     "📊 Leltár & Időszaki Export",
+    "📈 ABC Elemzés (Készletérték)",
     "📜 Árumozgás Napló", 
     "⚙️ Adminisztráció & Védett Törlés"
 ])
@@ -233,9 +236,9 @@ elif menu == "➕ Új Termék Rögzítése":
     with st.form("uj_termek_form"):
         col1, col2 = st.columns(2)
         with col1:
-            uj_cikkszam = st.text_input("Cikkszám (pl. ART-004)", value="ART-004")
+            uj_cikkszam = st.text_input("Cikkszám (pl. ART-005)", value="ART-005")
             uj_nev = st.text_input("Megnevezés", value="Billentyűzet")
-            uj_vonalkod = st.text_input("Vonalkód (EAN)", value="5901234567894")
+            uj_vonalkod = st.text_input("Vonalkód (EAN)", value="5901234567895")
         with col2:
             uj_biztonsagi = st.number_input("Biztonsági készlet (db)", min_value=0, value=5)
             uj_rendeleskoteles = st.number_input("Rendelésköteles készlet (db)", min_value=0, value=12)
@@ -339,17 +342,69 @@ elif menu == "📊 Leltár & Időszaki Export":
                     st.rerun()
                 else:
                     st.error("❌ Helytelen Admin jelszó!")
-    else:
-        st.write("Nincs korrigálható sarzs a raktárban.")
 
-# 6. NAPLÓ
+# 6. ABC ELEMZÉS MODUL
+elif menu == "📈 ABC Elemzés (Készletérték)":
+    st.header("📈 Készletérték Alapú ABC Elemzés")
+    st.markdown("""
+    Az ABC elemzés a **Pareto-elv (80/20-as szabály)** alapján csoportosítja a raktári termékeket:
+    * **'A' kategória:** A teljes készletérték kb. **80%-át** adó legértékesebb termékek (kiemelt figyelmet igényelnek).
+    * **'B' kategória:** A következő kb. **15%-ot** adó közepes értékű termékek.
+    * **'C' kategória:** A maradék kb. **5%-ot** adó, kis értékű vagy nagy mennyiségű tömegcikkek.
+    """)
+    
+    if st.session_state.sarzs_keszlet.empty:
+        st.warning("⚠️ Nincs készleten lévő áru az elemzés elvégzéséhez!")
+    else:
+        # Készletérték számítása cikkekre lebontva
+        df_abc = st.session_state.sarzs_keszlet.copy()
+        df_abc["Készletérték"] = df_abc["Mennyiség"] * df_abc["Beszerzési Ár"]
+        
+        # Összegzés cikkszámonként
+        abc_summary = df_abc.groupby(["Cikkszám", "Megnevezés"]).agg(
+            Össz_Mennyiség=("Mennyiség", "sum"),
+            Össz_Készletérték=("Készletérték", "sum")
+        ).reset_index()
+        
+        # Csökkenő sorrendbe rendezés érték alapján
+        abc_summary = abc_summary.sort_values(by="Össz_Készletérték", ascending=False).reset_index(drop=True)
+        
+        # Kumulált érték és százalék számítás
+        teljes_raktar_ertek = abc_summary["Össz_Készletérték"].sum()
+        abc_summary["Kumulált_Érték"] = abc_summary["Össz_Készletérték"].cumsum()
+        abc_summary["Kumulált_%"] = (abc_summary["Kumulált_Érték"] / teljes_raktar_ertek) * 100
+        
+        # ABC Besorolási logika
+        def besorolas(pct):
+            if pct <= 80:
+                return "🔴 'A' Osztály (Szigorú kontroll)"
+            elif pct <= 95:
+                return "🟡 'B' Osztály (Átlagos kontroll)"
+            else:
+                return "🟢 'C' Osztály (Egyszerűsített)"
+
+        abc_summary["ABC Osztály"] = abc_summary["Kumulált_%"].apply(besorolas)
+        
+        st.subheader("📊 Elemzési Eredmények:")
+        st.dataframe(abc_summary.style.format({
+            "Össz_Készletérték": "{:,.0f} Ft",
+            "Kumulált_Érték": "{:,.0f} Ft",
+            "Kumulált_%": "{:.2f} %"
+        }), use_container_width=True)
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("🔴 'A' Cikkek száma", len(abc_summary[abc_summary["ABC Osztály"].str.contains("'A'")]))
+        col2.metric("🟡 'B' Cikkek száma", len(abc_summary[abc_summary["ABC Osztály"].str.contains("'B'")]))
+        col3.metric("🟢 'C' Cikkek száma", len(abc_summary[abc_summary["ABC Osztály"].str.contains("'C'")]))
+
+# 7. NAPLÓ
 elif menu == "📜 Árumozgás Napló":
     st.header("📜 Árumozgási Előzmények")
     st.dataframe(st.session_state.naplo, use_container_width=True)
     csv = st.session_state.naplo.to_csv(index=False).encode('utf-8')
     st.download_button("Napló Letöltése (CSV)", csv, "wms_naplo.csv", "text/csv")
 
-# 7. ADMINISZTRÁCIÓ ÉS JELSZÓVAL VÉDETT TELJES TÖRLÉS
+# 8. ADMINISZTRÁCIÓ ÉS JELSZÓVAL VÉDETT TELJES TÖRLÉS
 elif menu == "⚙️ Adminisztráció & Védett Törlés":
     st.header("⚙️ Adminisztráció és Védett Műveletek")
     st.info("🔒 A törlési műveletekhez adminisztrátori jelszó szükséges!")
