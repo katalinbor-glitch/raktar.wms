@@ -15,7 +15,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS naplo
              (id INTEGER PRIMARY KEY AUTOINCREMENT, datum TEXT, tipus TEXT, cikkszam TEXT, nev TEXT, mennyiseg INTEGER, egyseg TEXT, tarhely TEXT)''')
 conn.commit()
 
-# Adatbázis sémakorrekció (ha a régi adatbázisból hiányoznának az új oszlopok)
+# Adatbázis sémakorrekció
 try:
     c.execute("ALTER TABLE keszlet ADD COLUMN egyseg TEXT DEFAULT 'db'")
     conn.commit()
@@ -214,6 +214,3 @@ with tabs[4]:
             st.rerun()
         else:
             st.error("❌ Hibás jelszó!")
-        else:
-            st.error("❌ Hibás jelszó!")
-   
