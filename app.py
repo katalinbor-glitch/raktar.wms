@@ -15,6 +15,25 @@ c.execute('''CREATE TABLE IF NOT EXISTS naplo
              (id INTEGER PRIMARY KEY AUTOINCREMENT, datum TEXT, tipus TEXT, cikkszam TEXT, nev TEXT, mennyiseg INTEGER, egyseg TEXT, tarhely TEXT)''')
 conn.commit()
 
+# Adatbázis sémakorrekció (ha a régi adatbázisból hiányoznának az új oszlopok)
+try:
+    c.execute("ALTER TABLE keszlet ADD COLUMN egyseg TEXT DEFAULT 'db'")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
+try:
+    c.execute("ALTER TABLE keszlet ADD COLUMN egysegar REAL DEFAULT 0.0")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
+try:
+    c.execute("ALTER TABLE naplo ADD COLUMN egyseg TEXT DEFAULT 'db'")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
 # Előre definiált opciók
 TARHELYEK = [
     "A-01-01", "A-01-02", "A-01-03",
@@ -48,7 +67,6 @@ with tabs[0]:
         
         if submit:
             if cikkszam and nev and tarhely:
-                # Tárhely kapacitás ellenőrzés
                 c.execute("SELECT SUM(mennyiseg) FROM keszlet WHERE tarhely = ?", (tarhely,))
                 jelenlegi_tarhely_db = c.fetchone()[0] or 0
                 if jelenlegi_tarhely_db + mennyiseg > 100:
@@ -69,6 +87,7 @@ with tabs[0]:
                           (most, "BEVÉTEL", cikkszam, nev, mennyiseg, egyseg, tarhely))
                 conn.commit()
                 st.success(f"✅ Sikeres bevételezés: {nev} ({mennyiseg} {egyseg})")
+                st.rerun()
             else:
                 st.error("❌ Kérjük, töltsön ki minden mezőt!")
 
@@ -132,7 +151,6 @@ with tabs[2]:
         teljes_ertek = df_keszlet['Összérték (Ft)'].sum()
         st.metric(label="💰 Teljes Raktárkészlet Értéke", value=f"{teljes_ertek:,.0f} Ft".replace(",", " "))
         
-        # Excel letöltés
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_keszlet.to_excel(writer, index=False, sheet_name='Keszlet')
@@ -194,6 +212,8 @@ with tabs[4]:
             conn.commit()
             st.success("✅ Az adatbázis sikeresen kiürítve!")
             st.rerun()
+        else:
+            st.error("❌ Hibás jelszó!")
         else:
             st.error("❌ Hibás jelszó!")
    
