@@ -7,12 +7,12 @@ st.set_page_config(page_title="WMS Raktárirányító Rendszer", layout="wide")
 # Konfiguráció - Beállított Admin jelszó
 ADMIN_PIN = "Coca-cola20"
 
-# 1. INICIALIZÁLÁS (Készlet és Törzsadatok)
+# 1. INICIALIZÁLÁS (Készlet és Törzsadatok Rendelésköteles Szinttel)
 if "cikktorzs" not in st.session_state:
     st.session_state.cikktorzs = pd.DataFrame([
-        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Vonalkód": "5901234567891", "Biztonsági készlet": 12},
-        {"Cikkszám": "ART-002", "Megnevezés": "Egér Logitech MX Master", "Vonalkód": "5901234567892", "Biztonsági készlet": 10},
-        {"Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Vonalkód": "5901234567893", "Biztonsági készlet": 5}
+        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Vonalkód": "5901234567891", "Biztonsági készlet": 5, "Rendelésköteles készlet": 12},
+        {"Cikkszám": "ART-002", "Megnevezés": "Egér Logitech MX Master", "Vonalkód": "5901234567892", "Biztonsági készlet": 5, "Rendelésköteles készlet": 15},
+        {"Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Vonalkód": "5901234567893", "Biztonsági készlet": 2, "Rendelésköteles készlet": 6}
     ])
 
 if "sarzs_keszlet" not in st.session_state:
@@ -40,7 +40,7 @@ menu = st.sidebar.radio("Navigáció / Modulok", [
     "⚙️ Adminisztráció & Védett Törlés"
 ])
 
-# 1. PILLANATNYI KÉSZLET & JELZŐRENDSZER
+# 1. PILLANATNYI KÉSZLET & JELZŐRENDSZER (RENDELÉSKÖTELES KÉSZLETTEL)
 if menu == "📋 Pillanatnyi Készlet & Rendszint":
     st.header("📋 Pillanatnyi Készlet & Újrarendelési Jelzések")
     
@@ -50,22 +50,23 @@ if menu == "📋 Pillanatnyi Készlet & Rendszint":
         keszlet_összegzo = st.session_state.sarzs_keszlet.groupby("Cikkszám")["Mennyiség"].sum().reset_index()
         df_merged = pd.merge(st.session_state.cikktorzs, keszlet_összegzo, on="Cikkszám", how="left").fillna(0)
         
+        # Rendelésköteles készlet vs. Biztonsági készlet ellenőrzése
         def kartya_statusz(row):
             if row["Mennyiség"] <= row["Biztonsági készlet"]:
-                return "⚠️ UTÁNARENDELÉS SZÜKSÉGES"
-            elif row["Mennyiség"] <= row["Biztonsági készlet"] * 1.5:
-                return "⚡ OPTIMÁLIS / KÖZELÍT A MINIMUMHOZ"
+                return "🚨 KRITIKUS (BIZTONSÁGI KÉSZLET ALATT!)"
+            elif row["Mennyiség"] <= row["Rendelésköteles készlet"]:
+                return "⚠️ RENDELÉSKÖTELES KÉSZLET ELÉRVE! (RENDELNI KELL!)"
             else:
                 return "✅ OPTIMÁLIS KÉSZLET"
 
         df_merged["Készlet Státusz"] = df_merged.apply(kartya_statusz, axis=1)
         
-        rendelendo = df_merged[df_merged["Mennyiség"] <= df_merged["Biztonsági készlet"]]
+        rendelendo = df_merged[df_merged["Mennyiség"] <= df_merged["Rendelésköteles készlet"]]
         if not rendelendo.empty:
-            st.error(f"🚨 **FIGYELEM! {len(rendelendo)} termék elérte a biztonsági készletszintet! Rendelés szükséges.**")
+            st.error(f"🚨 **FIGYELEM! {len(rendelendo)} termék elérte a rendelésköteles készletszintet! Utánrendelés szükséges.**")
             for _, row in rendelendo.iterrows():
-                szukseges = row['Biztonsági készlet'] * 2 - row['Mennyiség']
-                st.warning(f"👉 **{row['Megnevezés']}** ({row['Cikkszám']}): Jelenleg **{int(row['Mennyiség'])} db** van raktáron (Biztonsági limit: **{row['Biztonsági készlet']} db**). Javasolt rendelés: **{int(szukseges)} db**")
+                szukseges = (row['Rendelésköteles készlet'] * 2) - row['Mennyiség']
+                st.warning(f"👉 **{row['Megnevezés']}** ({row['Cikkszám']}): Jelenleg **{int(row['Mennyiség'])} db** van raktáron (Rendelési limit: **{row['Rendelésköteles készlet']} db** | Biztonsági limit: **{row['Biztonsági készlet']} db**). Javasolt rendelés: **{int(szukseges)} db**")
         else:
             st.success("✅ Minden termékből optimális a készletszint!")
 
@@ -221,10 +222,10 @@ elif menu == "📤 Kiadás (Stratégia & Tárhely)":
                         st.write(f"- {utazas}")
                     
                     friss_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam]["Mennyiség"].sum()
-                    bizt_keszlet = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == kivalasztott_cikkszam]["Biztonsági készlet"].values[0]
+                    rend_keszlet = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == kivalasztott_cikkszam]["Rendelésköteles készlet"].values[0]
                     
-                    if friss_keszlet <= bizt_keszlet:
-                        st.error(f"🚨 **RENDELÉSI RIASZTÁS!** A(z) {kivalasztott_termek_label} készlete kiadás után **{int(friss_keszlet)} db**-ra csökkent, ami eléri a biztonsági szintet ({bizt_keszlet} db)! **Újrarendelés szükséges!**")
+                    if friss_keszlet <= rend_keszlet:
+                        st.error(f"🚨 **RENDELÉSI RIASZTÁS!** A(z) {kivalasztott_termek_label} készlete kiadás után **{int(friss_keszlet)} db**-ra csökkent, ami eléri a rendelésköteles szintet ({rend_keszlet} db)! **Utánrendelés szükséges!**")
 
 # 4. ÚJ TERMÉK RÖGZÍTÉSE
 elif menu == "➕ Új Termék Rögzítése":
@@ -237,13 +238,20 @@ elif menu == "➕ Új Termék Rögzítése":
             uj_vonalkod = st.text_input("Vonalkód (EAN)", value="5901234567894")
         with col2:
             uj_biztonsagi = st.number_input("Biztonsági készlet (db)", min_value=0, value=5)
+            uj_rendeleskoteles = st.number_input("Rendelésköteles készlet (db)", min_value=0, value=12)
 
         submitted_uj = st.form_submit_button("Új Termék Mentése")
         if submitted_uj:
             if uj_cikkszam in st.session_state.cikktorzs["Cikkszám"].values:
                 st.error("⚠️ Ez a cikkszám már létezik!")
             else:
-                uj_sor = {"Cikkszám": uj_cikkszam, "Megnevezés": uj_nev, "Vonalkód": uj_vonalkod, "Biztonsági készlet": uj_biztonsagi}
+                uj_sor = {
+                    "Cikkszám": uj_cikkszam, 
+                    "Megnevezés": uj_nev, 
+                    "Vonalkód": uj_vonalkod, 
+                    "Biztonsági készlet": uj_biztonsagi,
+                    "Rendelésköteles készlet": uj_rendeleskoteles
+                }
                 st.session_state.cikktorzs = pd.concat([st.session_state.cikktorzs, pd.DataFrame([uj_sor])], ignore_index=True)
                 st.success(f"✅ Termék mentve: {uj_nev}")
 
@@ -373,7 +381,7 @@ elif menu == "⚙️ Adminisztráció & Védett Törlés":
         
         if st.button("Minden Adat Végleges Törlése"):
             if pin_reset == ADMIN_PIN:
-                st.session_state.cikktorzs = pd.DataFrame(columns=["Cikkszám", "Megnevezés", "Vonalkód", "Biztonsági készlet"])
+                st.session_state.cikktorzs = pd.DataFrame(columns=["Cikkszám", "Megnevezés", "Vonalkód", "Biztonsági készlet", "Rendelésköteles készlet"])
                 st.session_state.sarzs_keszlet = pd.DataFrame(columns=["SarzsID", "Cikkszám", "Megnevezés", "Mennyiség", "Tárhely", "Beérkezés", "Lejárat", "Beszerzési Ár"])
                 st.session_state.naplo = pd.DataFrame(columns=["Dátum", "Művelet", "Cikkszám", "Megnevezés", "Mennyiség", "SarzsID", "Tárhely", "Stratégia", "Beszerzési Ár", "Felhasználó"])
                 st.success("✅ A raktár adatbázisa teljesen ki lett ürítve!")
