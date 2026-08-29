@@ -4,12 +4,12 @@ import datetime
 
 st.set_page_config(page_title="WMS Raktárirányító Rendszer", layout="wide")
 
-# 1. INICIALIZÁLÁS
+# 1. INICIALIZÁLÁS (Készlet és Biztonsági limitszintek)
 if "cikktorzs" not in st.session_state:
     st.session_state.cikktorzs = pd.DataFrame([
-        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Vonalkód": "5901234567891", "Biztonsági készlet": 5},
+        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Vonalkód": "5901234567891", "Biztonsági készlet": 12},
         {"Cikkszám": "ART-002", "Megnevezés": "Egér Logitech MX Master", "Vonalkód": "5901234567892", "Biztonsági készlet": 10},
-        {"Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Vonalkód": "5901234567893", "Biztonsági készlet": 3}
+        {"Cikkszám": "ART-003", "Megnevezés": "Monitor HP 27 inch", "Vonalkód": "5901234567893", "Biztonsági készlet": 5}
     ])
 
 if "sarzs_keszlet" not in st.session_state:
@@ -28,7 +28,7 @@ st.title("📦 WMS Raktárirányítási Rendszer")
 
 # Oldalsáv navigáció
 menu = st.sidebar.radio("Navigáció / Modulok", [
-    "📋 Pillanatnyi Készlet", 
+    "📋 Pillanatnyi Készlet & Rendszint", 
     "📥 Bevételezés", 
     "📤 Kiadás (Stratégia & Tárhely)", 
     "➕ Új Termék Rögzítése",
@@ -36,14 +36,35 @@ menu = st.sidebar.radio("Navigáció / Modulok", [
     "⚙️ Adminisztráció / Reset"
 ])
 
-# 1. PILLANATNYI KÉSZLET
-if menu == "📋 Pillanatnyi Készlet":
-    st.header("📋 Pillanatnyi Készlet (Sarzsok & Tárhelyek)")
+# 1. PILLANATNYI KÉSZLET & JELZŐRENDSZER
+if menu == "📋 Pillanatnyi Készlet & Rendszint":
+    st.header("📋 Pillanatnyi Készlet & Újrarendelési Jelzések")
     
     keszlet_összegzo = st.session_state.sarzs_keszlet.groupby("Cikkszám")["Mennyiség"].sum().reset_index()
     df_merged = pd.merge(st.session_state.cikktorzs, keszlet_összegzo, on="Cikkszám", how="left").fillna(0)
     
-    st.subheader("Termékek Összesített Készlete")
+    # Készlet státusz meghatározása logic
+    def kartya_statusz(row):
+        if row["Mennyiség"] <= row["Biztonsági készlet"]:
+            return "⚠️ UTÁNARENDELÉS SZÜKSÉGES"
+        elif row["Mennyiség"] <= row["Biztonsági készlet"] * 1.5:
+            return "⚡ OPTIMÁLIS / KÖZELÍT A MINIMUMHOZ"
+        else:
+            return "✅ OPTIMÁLIS KÉSZLET"
+
+    df_merged["Készlet Státusz"] = df_merged.apply(kartya_statusz, axis=1)
+    
+    # Figyelmeztető riasztások megjelenítése alacsony készlet esetén
+    rendelendo = df_merged[df_merged["Mennyiség"] <= df_merged["Biztonsági készlet"]]
+    if not rendelendo.empty:
+        st.error(f"🚨 **FIGYELEM! {len(rendelendo)} termék elérte a biztonsági készletszintet! Rendelés szükséges.**")
+        for _, row in rendelendo.iterrows():
+            szukseges = row['Biztonsági készlet'] * 2 - row['Mennyiség']
+            st.warning(f"👉 **{row['Megnevezés']}** ({row['Cikkszám']}): Jelenleg **{int(row['Mennyiség'])} db** van raktáron (Biztonsági limit: **{row['Biztonsági készlet']} db**). Javasolt rendelés: **{int(szukseges)} db**")
+    else:
+        st.success("✅ Minden termékből optimális a készletszint!")
+
+    st.subheader("Összesített Készlet és Rendszint Státusz")
     st.dataframe(df_merged, use_container_width=True)
     
     st.subheader("Részletes Sarzs és Tárhely Nyilvántartás")
@@ -51,7 +72,7 @@ if menu == "📋 Pillanatnyi Készlet":
 
 # 2. BEVÉTELEZÉS
 elif menu == "📥 Bevételezés":
-    st.header("📥 Áru Bevételezés (Tárhely Megadásával)")
+    st.header("📥 Áru Bevételezés")
     
     termek_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']}": row['Cikkszám'] for _, row in st.session_state.cikktorzs.iterrows()}
     kivalasztott_termek_label = st.selectbox("Termék kiválasztása", list(termek_opciok.keys()))
@@ -98,11 +119,11 @@ elif menu == "📥 Bevételezés":
                 "Felhasználó": diak_nev
             }
             st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([uj_bejegyzes])], ignore_index=True)
-            st.success(f"Sikeres bevételezés! Tárhely: {tarhely} | Sarzs azonosító: {új_sarzs_id}")
+            st.success(f"Sikeres bevételezés! Tárhely: {tarhely} | Sarzs: {új_sarzs_id}")
 
-# 3. KIADÁS (JAVÍTOTT KEYERROR KEZELÉS)
+# 3. KIADÁS (AZONNALI AUTOMATIKUS RIASZTÁSSAL)
 elif menu == "📤 Kiadás (Stratégia & Tárhely)":
-    st.header("📤 Áru Kiadás (Automatikus Tárhely-meghatározással)")
+    st.header("📤 Áru Kiadás")
     
     termek_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']}": row['Cikkszám'] for _, row in st.session_state.cikktorzs.iterrows()}
     kivalasztott_termek_label = st.selectbox("Kiadandó Termék Kiválasztása", list(termek_opciok.keys()))
@@ -135,7 +156,6 @@ elif menu == "📤 Kiadás (Stratégia & Tárhely)":
             if mennyiseg > osszes_keszlet:
                 st.error(f"Nincs elegendő készlet! Elérhető összkészlet: {osszes_keszlet} db")
             else:
-                # Rendezés stratégia szerint
                 ar_oszlop = "Beszerzési Ár" if "Beszerzési Ár" in elerheto_sarzsok.columns else "Beszerzési Ár (Ft)"
                 
                 if "FIFO" in strategia:
@@ -166,8 +186,7 @@ elif menu == "📤 Kiadás (Stratégia & Tárhely)":
                     maradek_igény -= levonando
                     
                     ar_ertek = row.get("Beszerzési Ár", row.get("Beszerzési Ár (Ft)", 0))
-                    
-                    kiadasi_utasitasok.append(f"📦 Termék: **{row['Megnevezés']}** | 📍 **Tárhely: {row['Tárhely']}** | Sarzs: {row['SarzsID']} | Mennyiség: **{levonando} db** (Ár: {ar_ertek} Ft)")
+                    kiadasi_utasitasok.append(f"📦 Termék: **{row['Megnevezés']}** | 📍 **Tárhely: {row['Tárhely']}** | Sarzs: {row['SarzsID']} | Mennyiség: **{levonando} db**")
                     
                     uj_bejegyzes = {
                         "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -186,9 +205,16 @@ elif menu == "📤 Kiadás (Stratégia & Tárhely)":
                 st.session_state.sarzs_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Mennyiség"] > 0]
                 
                 st.success(f"✅ Kiadás sikeresen végrehajtva ({strat_nev} alapján)!")
-                st.markdown("### 📋 Kiszedési Utasítás a Raktárosnak (Pick List):")
+                st.markdown("### 📋 Kiszedési Utasítás:")
                 for utazas in kiadasi_utasitasok:
                     st.write(f"- {utazas}")
+                
+                # Kiadás utáni azonnali rendszint ellenőrzés
+                friss_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam]["Mennyiség"].sum()
+                bizt_keszlet = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == kivalasztott_cikkszam]["Biztonsági készlet"].values[0]
+                
+                if friss_keszlet <= bizt_keszlet:
+                    st.error(f"🚨 **RENDELÉSI RIASZTÁS!** A(z) {kivalasztott_termek_label} készlete kiadás után **{int(friss_keszlet)} db**-ra csökkent, ami eléri a biztonsági szintet ({bizt_keszlet} db)! **Újrarendelés szükséges!**")
 
 # 4. ÚJ TERMÉK RÖGZÍTÉSE
 elif menu == "➕ Új Termék Rögzítése":
