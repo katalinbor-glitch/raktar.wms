@@ -6,6 +6,35 @@ import io
 import barcode
 from barcode.writer import ImageWriter
 
+st.set_page_config(page_title="Raktárkezelő Rendszer (WMS)", layout="wide")
+
+# ==========================================
+# 🔒 BEJELENTKEZÉSI VÉDELEM (ÓRAI JELSZÓ)
+# ==========================================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔒 Bejelentkezés a Raktárkezelőbe")
+    st.info("A rendszer használatához kérjük, add meg az oktató által megadott órai jelszót.")
+    
+    with st.form("login_form"):
+        password = st.text_input("🔑 Belépési jelszó:", type="password")
+        submit_pass = st.form_submit_button("Belépés")
+        
+        if submit_pass:
+            if password == "diak2026":  # <-- ITT MÓDOSÍTHATOD A JELSZÓT
+                st.session_state.authenticated = True
+                st.success("Sikeres belépés!")
+                st.rerun()
+            else:
+                st.error("❌ Hibás jelszó! Próbáld újra.")
+    st.stop()  # Amíg nincs jó jelszó, elrejti az alkalmazás többi részét
+
+# ==========================================
+# 🏭 RAKTÁRKEZELŐ ALKALMAZÁS (FŐPROGRAM)
+# ==========================================
+
 # Adatbázis kapcsolat
 conn = sqlite3.connect('raktar.db', check_same_thread=False)
 c = conn.cursor()
@@ -56,7 +85,6 @@ TARHELYEK = [
 
 EGYSÉGEK = ["db", "kg", "liter", "karton", "m2", "pár", "csomag"]
 
-st.set_page_config(page_title="Raktárkezelő Rendszer (WMS)", layout="wide")
 st.title("🏭 Raktárkezelő Rendszer (WMS)")
 
 tabs = st.tabs(["📥 Bevételezés", "📤 Kiadás", "📋 Pillanatnyi Készlet", "📜 Árumozgás Napló", "⚙️ Adminisztráció"])
