@@ -172,6 +172,8 @@ with tabs[2]:
     df_keszlet = pd.read_sql_query(query, conn)
     
     if not df_keszlet.empty:
+        df_keszlet['Egységár (Ft)'] = df_keszlet['Egységár (Ft)'].fillna(0)
+        df_keszlet['Mennyiség'] = df_keszlet['Mennyiség'].fillna(0)
         df_keszlet['Összérték (Ft)'] = df_keszlet['Mennyiség'] * df_keszlet['Egységár (Ft)']
         
         # Logisztikai státusz kiszámítása az egyedi értékek alapján
@@ -191,15 +193,16 @@ with tabs[2]:
         
         if kereses:
             df_keszlet = df_keszlet[
-                df_keszlet['Cikkszám'].str.contains(kereses, case=False, na=False) |
-                df_keszlet['Név'].str.contains(kereses, case=False, na=False) |
-                df_keszlet['Tárhely'].str.contains(kereses, case=False, na=False)
+                df_keszlet['Cikkszám'].astype(str).str.contains(kereses, case=False, na=False) |
+                df_keszlet['Név'].astype(str).str.contains(kereses, case=False, na=False) |
+                df_keszlet['Tárhely'].astype(str).str.contains(kereses, case=False, na=False)
             ]
         
         st.dataframe(df_keszlet, use_container_width=True)
         
-        teljes_ertek = df_keszlet['Összérték (Ft)'].sum()
-        st.metric(label="💰 Teljes Raktárkészlet Értéke", value=f"{teljes_ertek:,.0f} Ft".replace(",", " "))
+        teljes_ertek = float(df_keszlet['Összérték (Ft)'].sum())
+        ertek_formazott = f"{teljes_ertek:,.0f}".replace(",", " ")
+        st.metric(label="💰 Teljes Raktárkészlet Értéke", value=f"{ertek_formazott} Ft")
         
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -264,5 +267,3 @@ with tabs[4]:
             st.rerun()
         else:
             st.error("❌ Hibás jelszó!")
-        
-         
