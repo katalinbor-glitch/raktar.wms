@@ -6,7 +6,7 @@ st.set_page_config(page_title="WMS Raktárirányító Rendszer", layout="wide")
 
 # Konfiguráció - Beállított jelszavak
 LOGIN_PASSWORD = "wms2026"  # Belépési jelszó a diákoknak / felhasználóknak
-ADMIN_PIN = "Coca-cola20"   # Admin jelszó a törlésekhez és leltárkorrekcióhoz
+ADMIN_PIN = "Coca-cola20"   # Admin jelszó a törlésekhez, leltárkorrekcióhoz és tárhelykezeléshez
 
 # 1. BEJELENTKEZÉSI LOGIKA (SESSION STATE)
 if "authenticated" not in st.session_state:
@@ -28,18 +28,26 @@ if not st.session_state.authenticated:
             else:
                 st.error("❌ Helytelen jelszó! Próbáld újra.")
     
-    st.stop()  # Megállítja a kód futását, így semmi más nem látható belépés előtt
+    st.stop()
 
 # ==============================================================================
 # ALKALMAZÁS TARTALMA (Csak sikeres belépés után jelenik meg)
 # ==============================================================================
 
-# Kijelentkezés gomb az oldalsáv tetején
 if st.sidebar.button("🚪 Kijelentkezés"):
     st.session_state.authenticated = False
     st.rerun()
 
-# 2. INICIALIZÁLÁS (Készlet és Törzsadatok Rendelésköteles Szinttel)
+# 2. INICIALIZÁLÁS (Készlet, Tárhelyek és Törzsadatok)
+if "tarhely_torzs" not in st.session_state:
+    st.session_state.tarhely_torzs = pd.DataFrame([
+        {"Tárhely": "A-01-01", "Max Kapacitás": 100},
+        {"Tárhely": "A-01-02", "Max Kapacitás": 50},
+        {"Tárhely": "B-02-01", "Max Kapacitás": 20},
+        {"Tárhely": "C-03-02", "Max Kapacitás": 10},
+        {"Tárhely": "D-01-01", "Max Kapacitás": 200}
+    ])
+
 if "cikktorzs" not in st.session_state:
     st.session_state.cikktorzs = pd.DataFrame([
         {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Vonalkód": "5901234567891", "Biztonsági készlet": 5, "Rendelésköteles készlet": 12},
@@ -75,7 +83,7 @@ menu = st.sidebar.radio("Navigáció / Modulok", [
     "⚙️ Adminisztráció & Védett Törlés"
 ])
 
-# 1. PILLANATNYI KÉSZLET & JELZŐRENDSZER (RENDELÉSKÖTELES KÉSZLETTEL)
+# 1. PILLANATNYI KÉSZLET & JELZŐRENDSZER
 if menu == "📋 Pillanatnyi Készlet & Rendszint":
     st.header("📋 Pillanatnyi Készlet & Újrarendelési Jelzések")
     
@@ -85,7 +93,6 @@ if menu == "📋 Pillanatnyi Készlet & Rendszint":
         keszlet_összegzo = st.session_state.sarzs_keszlet.groupby("Cikkszám")["Mennyiség"].sum().reset_index()
         df_merged = pd.merge(st.session_state.cikktorzs, keszlet_összegzo, on="Cikkszám", how="left").fillna(0)
         
-        # Rendelésköteles készlet vs. Biztonsági készlet ellenőrzése
         def kartya_statusz(row):
             if row["Mennyiség"] <= row["Biztonsági készlet"]:
                 return "🚨 KRITIKUS (BIZTONSÁGI KÉSZLET ALATT!)"
@@ -108,6 +115,19 @@ if menu == "📋 Pillanatnyi Készlet & Rendszint":
         st.subheader("Összesített Készlet és Rendszint Státusz")
         st.dataframe(df_merged, use_container_width=True)
         
+        st.subheader("🏢 Tárhelyek Telítettsége és Max Kapacitása")
+        if st.session_state.tarhely_torzs.empty:
+            st.warning("⚠️ Nincsenek tárhelyek regisztrálva a rendszerben.")
+        else:
+            for _, row in st.session_state.tarhely_torzs.iterrows():
+                t_kod = row["Tárhely"]
+                m_kap = row["Max Kapacitás"]
+                j_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Tárhely"] == t_kod]["Mennyiség"].sum() if not st.session_state.sarzs_keszlet.empty else 0
+                szazalek = min(int((j_keszlet / m_kap) * 100), 100) if m_kap > 0 else 0
+                
+                st.write(f"**Tárhely:** `{t_kod}` | **Foglalt:** {j_keszlet} / {m_kap} db ({szazalek}%)")
+                st.progress(szazalek)
+
         st.subheader("Részletes Sarzs és Tárhely Nyilvántartás")
         st.dataframe(st.session_state.sarzs_keszlet, use_container_width=True)
 
@@ -117,6 +137,8 @@ elif menu == "📥 Bevételezés":
     
     if st.session_state.cikktorzs.empty:
         st.warning("⚠️ Először hozz létre egy terméket az 'Új Termék Rögzítése' menüpontban!")
+    elif st.session_state.tarhely_torzs.empty:
+        st.warning("⚠️ Nincsenek létező tárhelyek! Hozz létre tárhelyet az Adminisztráció menüpontban.")
     else:
         termek_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']}": row['Cikkszám'] for _, row in st.session_state.cikktorzs.iterrows()}
         kivalasztott_termek_label = st.selectbox("Termék kiválasztása", list(termek_opciok.keys()))
@@ -126,7 +148,8 @@ elif menu == "📥 Bevételezés":
             col1, col2 = st.columns(2)
             with col1:
                 mennyiseg = st.number_input("Bevételezendő mennyiség", min_value=1, value=5)
-                tarhely = st.text_input("Tárhely (pl. A-01-01, C-03-02)", value="A-01-01")
+                tarhely_lista = st.session_state.tarhely_torzs["Tárhely"].tolist()
+                tarhely = st.selectbox("Tárhely Kiválasztása", tarhely_lista)
             with col2:
                 beszerzesi_ar = st.number_input("Beszerzési Egységár (Ft)", min_value=0, value=50000)
                 lejarat = st.date_input("Lejárati dátum", value=datetime.date(2027, 12, 31))
@@ -135,35 +158,53 @@ elif menu == "📥 Bevételezés":
             submitted = st.form_submit_button("Bevételezés Rögzítése")
             
             if submitted:
-                termek_info = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == kivalasztott_cikkszam].iloc[0]
-                új_sarzs_id = f"S-{len(st.session_state.sarzs_keszlet) + 101}"
+                max_kapacitas = st.session_state.tarhely_torzs.loc[
+                    st.session_state.tarhely_torzs["Tárhely"] == tarhely, "Max Kapacitás"
+                ].values[0]
                 
-                uj_sarzs = {
-                    "SarzsID": új_sarzs_id,
-                    "Cikkszám": kivalasztott_cikkszam,
-                    "Megnevezés": termek_info["Megnevezés"],
-                    "Mennyiség": mennyiseg,
-                    "Tárhely": tarhely,
-                    "Beérkezés": datetime.date.today().strftime("%Y-%m-%d"),
-                    "Lejárat": lejarat.strftime("%Y-%m-%d"),
-                    "Beszerzési Ár": beszerzesi_ar
-                }
-                st.session_state.sarzs_keszlet = pd.concat([st.session_state.sarzs_keszlet, pd.DataFrame([uj_sarzs])], ignore_index=True)
+                jelenlegi_tarhely_keszlet = st.session_state.sarzs_keszlet[
+                    st.session_state.sarzs_keszlet["Tárhely"] == tarhely
+                ]["Mennyiség"].sum() if not st.session_state.sarzs_keszlet.empty else 0
                 
-                uj_bejegyzes = {
-                    "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "Művelet": "BEVÉTEL",
-                    "Cikkszám": kivalasztott_cikkszam,
-                    "Megnevezés": termek_info["Megnevezés"],
-                    "Mennyiség": mennyiseg,
-                    "SarzsID": új_sarzs_id,
-                    "Tárhely": tarhely,
-                    "Stratégia": "-",
-                    "Beszerzési Ár": beszerzesi_ar,
-                    "Felhasználó": diak_nev
-                }
-                st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([uj_bejegyzes])], ignore_index=True)
-                st.success(f"Sikeres bevételezés! Tárhely: {tarhely} | Sarzs: {új_sarzs_id}")
+                szabad_kapacitas = max_kapacitas - jelenlegi_tarhely_keszlet
+                
+                if mennyiseg > szabad_kapacitas:
+                    st.error(
+                        f"🚫 **KAPACITÁSTÚLLÉPÉS!** A(z) **{tarhely}** tárhelyre nem fér el ennyi áru!\n\n"
+                        f"- Maximális kapacitás: **{max_kapacitas} db**\n"
+                        f"- Jelenleg tárolt mennyiség: **{jelenlegi_tarhely_keszlet} db**\n"
+                        f"- Még bevételezhető: legfeljebb **{szabad_kapacitas} db**"
+                    )
+                else:
+                    termek_info = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == kivalasztott_cikkszam].iloc[0]
+                    új_sarzs_id = f"S-{len(st.session_state.sarzs_keszlet) + 101}"
+                    
+                    uj_sarzs = {
+                        "SarzsID": új_sarzs_id,
+                        "Cikkszám": kivalasztott_cikkszam,
+                        "Megnevezés": termek_info["Megnevezés"],
+                        "Mennyiség": mennyiseg,
+                        "Tárhely": tarhely,
+                        "Beérkezés": datetime.date.today().strftime("%Y-%m-%d"),
+                        "Lejárat": lejarat.strftime("%Y-%m-%d"),
+                        "Beszerzési Ár": beszerzesi_ar
+                    }
+                    st.session_state.sarzs_keszlet = pd.concat([st.session_state.sarzs_keszlet, pd.DataFrame([uj_sarzs])], ignore_index=True)
+                    
+                    uj_bejegyzes = {
+                        "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "Művelet": "BEVÉTEL",
+                        "Cikkszám": kivalasztott_cikkszam,
+                        "Megnevezés": termek_info["Megnevezés"],
+                        "Mennyiség": mennyiseg,
+                        "SarzsID": új_sarzs_id,
+                        "Tárhely": tarhely,
+                        "Stratégia": "-",
+                        "Beszerzési Ár": beszerzesi_ar,
+                        "Felhasználó": diak_nev
+                    }
+                    st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([uj_bejegyzes])], ignore_index=True)
+                    st.success(f"✅ Sikeres bevételezés! Tárhely: {tarhely} | Sarzs: {új_sarzs_id}")
 
 # 3. KIADÁS
 elif menu == "📤 Kiadás (Stratégia & Tárhely)":
@@ -380,9 +421,9 @@ elif menu == "📈 ABC Elemzés (Készletérték)":
     st.header("📈 Készletérték Alapú ABC Elemzés")
     st.markdown("""
     Az ABC elemzés a **Pareto-elv (80/20-as szabály)** alapján csoportosítja a raktári termékeket:
-    * **'A' kategória:** A teljes készletérték kb. **80%-át** adó legértékesebb termékek (kiemelt figyelmet igényelnek).
+    * **'A' kategória:** A teljes készletérték kb. **80%-át** adó legértékesebb termékek.
     * **'B' kategória:** A következő kb. **15%-ot** adó közepes értékű termékek.
-    * **'C' kategória:** A maradék kb. **5%-ot** adó, kis értékű vagy nagy mennyiségű tömegcikkek.
+    * **'C' kategória:** A maradék kb. **5%-ot** adó kis értékű termékek.
     """)
     
     if st.session_state.sarzs_keszlet.empty:
@@ -431,11 +472,87 @@ elif menu == "📜 Árumozgás Napló":
     csv = st.session_state.naplo.to_csv(index=False).encode('utf-8')
     st.download_button("Napló Letöltése (CSV)", csv, "wms_naplo.csv", "text/csv")
 
-# 8. ADMINISZTRÁCIÓ ÉS JELSZÓVAL VÉDETT TELJES TÖRLÉS
+# 8. ADMINISZTRÁCIÓ (TÁRHELYKEZELÉSSEL ÉS VÉDETT TÖRLÉSEKKEL)
 elif menu == "⚙️ Adminisztráció & Védett Törlés":
-    st.header("⚙️ Adminisztráció és Védett Műveletek")
-    st.info("🔒 A törlési műveletekhez adminisztrátori jelszó szükséges!")
+    st.header("⚙️ Adminisztráció és Rendszerbeállítások")
+    st.info("🔒 Az adminisztrációs funkciókhoz Admin jelszó szükséges!")
     
+    # 8.1 DINAMIKUS TÁRHELYKEZELÉS MODUL
+    st.subheader("🏢 Tárhelyek Dinamikus Kezelése")
+    
+    tab1, tab2 = st.tabs(["➕ Új Tárhely Létrehozása", "✏️ Tárhely Módosítása / Törlése"])
+    
+    with tab1:
+        with st.form("uj_tarhely_form"):
+            uj_t_kod = st.text_input("Új Tárhely Kódja (pl. E-01-01)", value="E-01-01")
+            uj_t_kap = st.number_input("Maximális Kapacitás (db)", min_value=1, value=100)
+            pin_tarhely_uj = st.text_input("Admin Jelszó", type="password", key="pin_t_uj")
+            
+            submit_t_uj = st.form_submit_button("Tárhely Létrehozása")
+            if submit_t_uj:
+                if pin_tarhely_uj == ADMIN_PIN:
+                    if uj_t_kod in st.session_state.tarhely_torzs["Tárhely"].values:
+                        st.error("⚠️ Ez a tárhely kód már létezik!")
+                    else:
+                        uj_tarhely_df = pd.DataFrame([{"Tárhely": uj_t_kod, "Max Kapacitás": uj_t_kap}])
+                        st.session_state.tarhely_torzs = pd.concat([st.session_state.tarhely_torzs, uj_tarhely_df], ignore_index=True)
+                        st.success(f"✅ Tárhely sikeresen létrehozva: {uj_t_kod} ({uj_t_kap} db kapacitással)")
+                        st.rerun()
+                else:
+                    st.error("❌ Helytelen Admin jelszó!")
+
+    with tab2:
+        if st.session_state.tarhely_torzs.empty:
+            st.write("Nincsenek módosítható tárhelyek.")
+        else:
+            t_lista = st.session_state.tarhely_torzs["Tárhely"].tolist()
+            mod_t_kod = st.selectbox("Választott Tárhely", t_lista)
+            
+            akt_kap = st.session_state.tarhely_torzs.loc[
+                st.session_state.tarhely_torzs["Tárhely"] == mod_t_kod, "Max Kapacitás"
+            ].values[0]
+            
+            with st.form("mod_tarhely_form"):
+                mod_t_kap = st.number_input("Új Maximális Kapacitás (db)", min_value=1, value=int(akt_kap))
+                pin_tarhely_mod = st.text_input("Admin Jelszó", type="password", key="pin_t_mod")
+                
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    submit_t_mod = st.form_submit_button("Kapacitás Módosítása")
+                with col_btn2:
+                    submit_t_del = st.form_submit_button("Tárhely Törlése")
+                
+                if submit_t_mod:
+                    if pin_tarhely_mod == ADMIN_PIN:
+                        st.session_state.tarhely_torzs.loc[
+                            st.session_state.tarhely_torzs["Tárhely"] == mod_t_kod, "Max Kapacitás"
+                        ] = mod_t_kap
+                        st.success(f"✅ {mod_t_kod} kapacitása frissítve {mod_t_kap} db-ra!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Helytelen Admin jelszó!")
+                        
+                if submit_t_del:
+                    if pin_tarhely_mod == ADMIN_PIN:
+                        # Ellenőrizzük, van-e készlet rajta
+                        keszlet_rajta = st.session_state.sarzs_keszlet[
+                            st.session_state.sarzs_keszlet["Tárhely"] == mod_t_kod
+                        ]["Mennyiség"].sum() if not st.session_state.sarzs_keszlet.empty else 0
+                        
+                        if keszlet_rajta > 0:
+                            st.error(f"🚫 Nem törölhető! A(z) {mod_t_kod} tárhelyen jelenleg {keszlet_rajta} db áru található! Előbb add ki vagy mozgasd el az árut.")
+                        else:
+                            st.session_state.tarhely_torzs = st.session_state.tarhely_torzs[
+                                st.session_state.tarhely_torzs["Tárhely"] != mod_t_kod
+                            ]
+                            st.success(f"✅ A(z) {mod_t_kod} tárhely törölve lett!")
+                            st.rerun()
+                    else:
+                        st.error("❌ Helytelen Admin jelszó!")
+
+    st.markdown("---")
+    
+    # 8.2 TÖRLESI ÉS NULLÁZÁSI MŰVELETEK
     col1, col2 = st.columns(2)
     
     with col1:
