@@ -86,9 +86,9 @@ if menu == "📋 Pillanatnyi Készlet & Riasztások":
         szabad = fizz - zarolt
         
         if szabad < cikk["Biztonsági készlet"]:
-            figyelmeztetesek.append((f"🚨 **KRITIKUS HIÁNY!** A(z) **{cikk['Megnevezés']} ({c_kod})** szabad készlete ({szabad} db) a Biztonsági Szint ({cikk['Biztonsági készlet']} db) ALÁ CSÖKKENT!", "error"))
+            figyelmeztetesek.append((f"🚨 **KRITIKUS HIÁNY!** A(z) **{cikk['Megnevezés']} ({c_kod})** szabad készlete ({szabad} db) a Biztonsági készlet ({cikk['Biztonsági készlet']} db) ALÁ CSÖKKENT!", "error"))
         elif szabad <= cikk["Rendelésköteles készlet"]:
-            figyelmeztetesek.append((f"⚠️ **UTÁNRENDELÉS SZÜKSÉGES!** A(z) **{cikk['Megnevezés']} ({c_kod})** elérte a rendelési küszöböt ({szabad} / {cikk['Rendelésköteles készlet']} db).", "warning"))
+            figyelmeztetesek.append((f"⚠️ **UTÁNRENDELÉS SZÜKSÉGES!** A(z) **{cikk['Megnevezés']} ({c_kod})** elérte a Rendelésköteles készlet szintjét ({szabad} / {cikk['Rendelésköteles készlet']} db).", "warning"))
 
     if not st.session_state.sarzs_keszlet.empty:
         for _, sarzs in st.session_state.sarzs_keszlet.iterrows():
@@ -120,9 +120,15 @@ if menu == "📋 Pillanatnyi Készlet & Riasztások":
         elif szabad <= cikk["Rendelésköteles készlet"]: allapot = "🟡 Utánrendelés szükséges"
             
         osszesito.append({
-            "Cikkszám": c_kod, "Megnevezés": cikk["Megnevezés"], "Típus": cikk["Típus"],
-            "Fizikai Készlet": fizz, "Zárolt": zarolt, "Szabad Készlet": szabad,
-            "Biztonsági Limit": cikk["Biztonsági készlet"], "Utánrendelési Limit": cikk["Rendelésköteles készlet"], "Státusz": allapot
+            "Cikkszám": c_kod, 
+            "Megnevezés": cikk["Megnevezés"], 
+            "Típus": cikk["Típus"],
+            "Fizikai Készlet": fizz, 
+            "Zárolt": zarolt, 
+            "Szabad Készlet": szabad,
+            "Biztonsági készlet": cikk["Biztonsági készlet"], 
+            "Rendelésköteles készlet": cikk["Rendelésköteles készlet"], 
+            "Státusz": allapot
         })
     st.dataframe(pd.DataFrame(osszesito), use_container_width=True)
 
@@ -326,7 +332,7 @@ elif menu == "📜 Árumozgás Napló":
     st.header("📜 Tranzakciós Árumozgás Napló")
     st.dataframe(st.session_state.naplo, use_container_width=True)
 
-# MODUL 8: ADMINISZTRÁCIÓ (ÚJ TERMÉK RÖGZÍTÉSÉVEL)
+# MODUL 8: ADMINISZTRÁCIÓ
 elif menu == "⚙️ Adminisztráció":
     st.header("⚙️ Adminisztrációs Beállítások & Cikktörzs Kezelés")
     
@@ -356,8 +362,8 @@ elif menu == "⚙️ Adminisztráció":
                     ])
                 with col2:
                     uj_adr = st.selectbox("ADR Veszélyességi Osztály", ["Nem ADR", "ADR 3", "ADR 8", "ADR 6.1"])
-                    uj_bizt = st.number_input("Biztonsági Készlet Limit (db)", min_value=0, value=10)
-                    uj_rendel = st.number_input("Utánrendelési Küszöb (db)", min_value=0, value=25)
+                    uj_bizt = st.number_input("Biztonsági készlet (db)", min_value=0, value=10)
+                    uj_rendel = st.number_input("Rendelésköteles készlet (db)", min_value=0, value=25)
                     uj_ertekesites = st.number_input("Becsült Éves Értékforgalom (Ft)", min_value=0, value=1000000)
                 
                 submit_uj_termek = st.form_submit_button("➕ Új Termék Elmentése")
