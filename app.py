@@ -6,6 +6,7 @@ import datetime
 st.set_page_config(page_title="WMS Logisztikai & ADR Raktárirányító", layout="wide")
 
 LOGIN_PASSWORD = "wms2026"
+ADMIN_PIN = "Coca-cola20"
 
 # 2. AUTHENTIKÁCIÓ
 if "authenticated" not in st.session_state:
@@ -23,8 +24,7 @@ if not st.session_state.authenticated:
                 st.error("❌ Helytelen jelszó!")
     st.stop()
 
-# 3. ADR ÖSSZEFÉRHETŐSÉGI MÁTRIX (SZABÁLYOK)
-# Melyik ADR osztály NEM tárolható együtt más ADR osztállyal egy tárhelyen/szektorban
+# 3. ADR ÖSSZEFÉRHETŐSÉGI MÁTRIX
 ADR_INCOMPATIBILITY = {
     "ADR 3 (Gyúlékony folyadékok)": ["ADR 5.1 (Oxidáló anyagok)", "ADR 8 (Maró anyagok)"],
     "ADR 5.1 (Oxidáló anyagok)": ["ADR 3 (Gyúlékony folyadékok)", "ADR 4.1 (Gyúlékony szilárd)", "ADR 8 (Maró anyagok)"],
@@ -33,7 +33,6 @@ ADR_INCOMPATIBILITY = {
 }
 
 def check_adr_compatibility(uj_adr, tarhely_id):
-    """ Ellenőrzi, hogy az adott tárhelyen lévő meglévő sarzsok ADR osztálya kompatibilis-e az új áruval """
     if uj_adr == "Nem ADR":
         return True, ""
     
@@ -46,7 +45,6 @@ def check_adr_compatibility(uj_adr, tarhely_id):
         if not cikk_info.empty:
             meglevo_adr = cikk_info.iloc[0]["ADR Osztály"]
             
-            # Tiltólista ellenőrzése
             if uj_adr in ADR_INCOMPATIBILITY and meglevo_adr in ADR_INCOMPATIBILITY[uj_adr]:
                 return False, f"⚠️ ADR TILTÁS! A tárhelyen már van '{meglevo_adr}' ({sarzs['Megnevezés']}), ami NEM tárolható együtt a(z) '{uj_adr}' osztállyal!"
             if meglevo_adr in ADR_INCOMPATIBILITY and uj_adr in ADR_INCOMPATIBILITY[meglevo_adr]:
@@ -73,11 +71,16 @@ if "cikktorzs" not in st.session_state:
 if "sarzs_keszlet" not in st.session_state:
     st.session_state.sarzs_keszlet = pd.DataFrame([
         {"SarzsID": "S-101", "Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Mennyiség": 10, "Zárolt_Mennyiség": 0, "Tárhely": "A-01-01", "Beérkezés": "2026-01-10", "Lejárat": "2028-01-10", "Beszerzési Ár": 240000},
+        {"SarzsID": "S-102", "Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Mennyiség": 5, "Zárolt_Mennyiség": 0, "Tárhely": "C-01-01", "Beérkezés": "2026-02-01", "Lejárat": "2028-02-01", "Beszerzési Ár": 260000},
         {"SarzsID": "S-201", "Cikkszám": "ART-002", "Megnevezés": "Ipari Oldószer (Acetón)", "Mennyiség": 30, "Zárolt_Mennyiség": 0, "Tárhely": "A-01-02", "Beérkezés": "2026-01-15", "Lejárat": "2027-06-30", "Beszerzési Ár": 12000}
     ])
 
 if "naplo" not in st.session_state:
     st.session_state.naplo = pd.DataFrame(columns=["Dátum", "Művelet", "Cikkszám", "Megnevezés", "Mennyiség", "SarzsID", "Tárhely", "Stratégia/Megjegyzés", "Beszerzési Ár", "Felhasználó"])
+
+# Utoljára generált Kiszedési Utasítás megőrzése
+if "aktiv_kiszedes" not in st.session_state:
+    st.session_state.aktiv_kiszedes = None
 
 # 5. NAVIGÁCIÓ
 st.sidebar.title("📌 WMS Menü")
@@ -89,10 +92,11 @@ menu = st.sidebar.radio("Válassz Modult:", [
     "📋 Pillanatnyi Készlet & Riasztások", 
     "➕ ÚJ TERMÉK RÖGZÍTÉSE & VONALKÓD",
     "📥 Áru Bevételezés & ADR Ellenőrzés", 
-    "📤 Általános Komissiózás", 
+    "📤 Áru Kiadás (FIFO, LIFO, FEFO, HIFO, LOFO)", 
     "📊 ABC Elemzés",
     "🧾 Leltár & Korrekció",
-    "📜 Árumozgás Napló"
+    "📜 Árumozgás Napló",
+    "⚙️ Adminisztráció"
 ])
 
 st.title("📦 WMS Általános & ADR Logisztikai Rendszer")
@@ -102,7 +106,6 @@ if menu == "📋 Pillanatnyi Készlet & Riasztások":
     st.header("📋 Pillanatnyi Raktárkészlet és Készletszint Riasztások")
     
     figyelmeztetesek = []
-    ma = datetime.date.today()
     
     for _, cikk in st.session_state.cikktorzs.iterrows():
         c_kod = cikk["Cikkszám"]
@@ -150,7 +153,7 @@ if menu == "📋 Pillanatnyi Készlet & Riasztások":
     st.subheader("📦 Sarzsalapú Részletes Készlet")
     st.dataframe(st.session_state.sarzs_keszlet, use_container_width=True)
 
-# MODUL 2: ÚJ TERMÉK RÖGZÍTÉSE & VONALKÓD GENERÁLÁS
+# MODUL 2: ÚJ TERMÉK RÖGZÍTÉSE & VONALKÓD
 elif menu == "➕ ÚJ TERMÉK RÖGZÍTÉSE & VONALKÓD":
     st.header("➕ Új Cikk Rögzítése a Cikktörzsbe & Vonalkód Generátor")
     
@@ -161,7 +164,6 @@ elif menu == "➕ ÚJ TERMÉK RÖGZÍTÉSE & VONALKÓD":
             uj_megnevezes = st.text_input("Termék Megnevezése*", placeholder="pl. Ipari Ragasztó 5L")
             uj_tipus = st.selectbox("Termék Kategóriája", ["Általános Cikk", "Veszélyes Áru (ADR)", "Csomagolóanyag", "Alkatrész"])
             
-            # Vonalkód generálás opció
             alap_vonalkod = f"590{datetime.datetime.now().strftime('%M%S')}{len(st.session_state.cikktorzs):04d}"
             uj_vonalkod = st.text_input("EAN-13 / Code128 Vonalkód", value=alap_vonalkod)
 
@@ -212,7 +214,6 @@ elif menu == "➕ ÚJ TERMÉK RÖGZÍTÉSE & VONALKÓD":
                 st.markdown(f"**Biztonsági készlet:** {cikk['Biztonsági készlet']} db")
                 st.markdown(f"**Rendelésköteles készlet:** {cikk['Rendelésköteles készlet']} db")
             with c2:
-                # Vizuális Vonalkód Címke Grafika (CSS/HTML szimuláció)
                 st.markdown(f"""
                 <div style="border: 2px solid #000; padding: 10px; background-color: #fff; color: #000; width: 260px; text-align: center; font-family: monospace;">
                     <div style="font-size: 12px; font-weight: bold;">{cikk['Megnevezés'][:25]}</div>
@@ -222,7 +223,7 @@ elif menu == "➕ ÚJ TERMÉK RÖGZÍTÉSE & VONALKÓD":
                 </div>
                 """, unsafe_allow_html=True)
 
-# MODUL 3: ÁRU BEVÉTELEZÉS & ADR ÖSSZEFÉRHETŐSÉG
+# MODUL 3: BEVÉTELEZÉS
 elif menu == "📥 Áru Bevételezés & ADR Ellenőrzés":
     st.header("📥 Áru Bevételezés (ADR Összeférhetőségi Ellenőrzéssel)")
     
@@ -244,8 +245,6 @@ elif menu == "📥 Áru Bevételezés & ADR Ellenőrzés":
         
         if submitted:
             adr_cikk = termek_info["ADR Osztály"]
-            
-            # ADR SZIGORÚ ÖSSZEFÉRHETŐSÉGI ELLENŐRZÉS
             kompatibilis, hiba_uzenet = check_adr_compatibility(adr_cikk, tarhely)
             
             if not kompatibilis:
@@ -267,27 +266,37 @@ elif menu == "📥 Áru Bevételezés & ADR Ellenőrzés":
                 }])], ignore_index=True)
                 st.success(f"✅ Sikeres Bevételezés a(z) **{tarhely}** tárhelyre! SarzsID: {uj_sarzs_id}")
 
-# MODUL 4: KOMISSIÓZÁS
-elif menu == "📤 Általános Komissiózás":
-    st.header("📤 Áru Kiadás & Komissiózás (FIFO / LIFO / FEFO)")
+# MODUL 4: KOMISSIÓZÁS (ÁLLANDÓ KISZEDÉSI UTASÍTÁSSAL)
+elif menu == "📤 Áru Kiadás (FIFO, LIFO, FEFO, HIFO, LOFO)":
+    st.header("📤 Áru Kiadás & Kiszedési Utasítás Generálás")
     termek_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']}": row['Cikkszám'] for _, row in st.session_state.cikktorzs.iterrows()}
-    kivalasztott_cikkszam = termek_opciok[st.selectbox("Kiadandó Termék", list(termek_opciok.keys()))]
+    kivalasztott_cikkszam = termek_opciok[st.selectbox("Kiadandó Termék Kiválasztása", list(termek_opciok.keys()))]
     
-    strategia = st.radio("Kibocsátási Stratégia:", ["FIFO (Első be, első ki)", "FEFO (Mielőbbi lejárat)", "LIFO (Utolsó be, első ki)"])
+    strategia = st.radio("Alkalmazandó Stratégia:", [
+        "FIFO (First In, First Out)", 
+        "LIFO (Last In, First Out)", 
+        "FEFO (First Expired, First Out)", 
+        "HIFO (Highest In, First Out)", 
+        "LOFO (Lowest In, First Out)"
+    ])
     
     with st.form("general_kiadas_form"):
         mennyiseg = st.number_input("Kiadandó mennyiség (db)", min_value=1, value=2)
+        kezelo = st.text_input("Komissiózó neve", value="Komissiózó 01")
         submitted = st.form_submit_button("🛒 Kiszedési Utasítás Generálása")
+        
         if submitted:
             elerheto = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam].copy()
             elerheto["Szabad"] = elerheto["Mennyiség"] - elerheto["Zárolt_Mennyiség"]
             
             if mennyiseg > elerheto["Szabad"].sum():
-                st.error("🚫 Nincs elég szabad készlet!")
+                st.error(f"🚫 Nincs elég szabad készlet! Elérhető: {elerheto['Szabad'].sum()} db")
             else:
                 if "FIFO" in strategia: elerheto = elerheto.sort_values(by="Beérkezés", ascending=True)
-                elif "FEFO" in strategia: elerheto = elerheto.sort_values(by="Lejárat", ascending=True)
                 elif "LIFO" in strategia: elerheto = elerheto.sort_values(by="Beérkezés", ascending=False)
+                elif "FEFO" in strategia: elerheto = elerheto.sort_values(by="Lejárat", ascending=True)
+                elif "HIFO" in strategia: elerheto = elerheto.sort_values(by="Beszerzési Ár", ascending=False)
+                elif "LOFO" in strategia: elerheto = elerheto.sort_values(by="Beszerzési Ár", ascending=True)
                 
                 maradek = mennyiseg
                 lista = []
@@ -296,11 +305,57 @@ elif menu == "📤 Általános Komissiózás":
                     levon = min(row["Szabad"], maradek)
                     st.session_state.sarzs_keszlet.loc[st.session_state.sarzs_keszlet["SarzsID"] == row["SarzsID"], "Mennyiség"] -= levon
                     maradek -= levon
-                    lista.append({"Tárhely": row["Tárhely"], "SarzsID": row["SarzsID"], "Kiszedendő (db)": levon})
+                    
+                    lista.append({
+                        "Tárhely": row["Tárhely"], 
+                        "SarzsID": row["SarzsID"], 
+                        "Kiszedendő (db)": levon,
+                        "Beérkezés": row["Beérkezés"],
+                        "Lejárat": row["Lejárat"],
+                        "Beszerzési Ár (Ft)": row["Beszerzési Ár"]
+                    })
+                    
+                    st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
+                        "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "Művelet": "KIADÁS", "Cikkszám": kivalasztott_cikkszam,
+                        "Megnevezés": row["Megnevezés"], "Mennyiség": levon, "SarzsID": row["SarzsID"],
+                        "Tárhely": row["Tárhely"], "Stratégia/Megjegyzés": strategia.split(" ")[0], 
+                        "Beszerzési Ár": row["Beszerzési Ár"], "Felhasználó": kezelo
+                    }])], ignore_index=True)
                 
                 st.session_state.sarzs_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Mennyiség"] > 0]
-                st.success("✅ Kiszedési Utasítás Generálva!")
-                st.table(pd.DataFrame(lista))
+                
+                # MENTÉS A SESSION STATE-BE HOGY NE TŰNJÖN EL!
+                st.session_state.aktiv_kiszedes = {
+                    "Cikkszám": kivalasztott_cikkszam,
+                    "Megnevezés": elerheto.iloc[0]["Megnevezés"],
+                    "Össz_Kiadott": mennyiseg,
+                    "Stratégia": strategia,
+                    "Kezelő": kezelo,
+                    "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Tételek": lista
+                }
+                st.success("✅ Kiszedési Utasítás sikeresen rögzítve és elmentve!")
+                st.rerun()
+
+    # ÁLLANDÓ KISZEDÉSI UTASÍTÁS MEGJELENÍTŐ (HA LÉTEZIK)
+    if st.session_state.aktiv_kiszedes is not None:
+        st.divider()
+        st.subheader("📋 AKTÍV KISZEDÉSI UTASÍTÁS (PICK LIST)")
+        
+        info = st.session_state.aktiv_kiszedes
+        
+        st.info(f"**Termék:** {info['Megnevezés']} ({info['Cikkszám']}) | **Összesen:** {info['Össz_Kiadott']} db | **Stratégia:** {info['Stratégia']} | **Kiadta:** {info['Kezelő']} | **Dátum:** {info['Dátum']}")
+        
+        df_kiszedes = pd.DataFrame(info["Tételek"])
+        st.table(df_kiszedes)
+        
+        col_a, col_b = st.columns([1, 4])
+        with col_a:
+            if st.button("🗑️ Kiszedés Lezárása & Törlése"):
+                st.session_state.aktiv_kiszedes = None
+                st.success("Kiszedési utasítás lezárva.")
+                st.rerun()
 
 # MODUL 5: ABC ELEMZÉS
 elif menu == "📊 ABC Elemzés":
@@ -356,3 +411,42 @@ elif menu == "🧾 Leltár & Korrekció":
 elif menu == "📜 Árumozgás Napló":
     st.header("📜 Tranzakciós Árumozgás Napló")
     st.dataframe(st.session_state.naplo, use_container_width=True)
+
+# MODUL 8: ADMINISZTRÁCIÓ
+elif menu == "⚙️ Adminisztráció":
+    st.header("⚙️ Adminisztrációs Beállítások & Tárhely/Cikktörzs Menedzsment")
+    
+    admin_pin_input = st.text_input("Adminisztrátori PIN Kód", type="password")
+    
+    if admin_pin_input == ADMIN_PIN:
+        st.success("🔓 Adminisztrátori hozzáférés engedélyezve.")
+        
+        tab1, tab2 = st.tabs(["📋 Cikktörzs Kezelése", "🏗️ Tárhely Törzs Kezelése"])
+        
+        with tab1:
+            st.subheader("Regisztrált Cikkek Adatbázisa")
+            st.dataframe(st.session_state.cikktorzs, use_container_width=True)
+            
+        with tab2:
+            st.subheader("Raktári Tárhelyek Listája")
+            st.dataframe(st.session_state.tarhely_torzs, use_container_width=True)
+            
+            with st.form("uj_tarhely_form"):
+                st.subheader("➕ Új Tárhely Hozzáadása")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    uj_t_kod = st.text_input("Tárhely Kód (pl. D-01-01)")
+                with c2:
+                    uj_t_kap = st.number_input("Max Kapacitás (db)", min_value=1, value=100)
+                with c3:
+                    uj_t_tipus = st.selectbox("Tárhely ADR Típusa", ["Általános", "ADR 3 (Gyúlékony)", "ADR 8 (Maró)", "ADR 5.1 (Oxidáló)"])
+                
+                if st.form_submit_button("Tárhely Rögzítése"):
+                    if uj_t_kod:
+                        st.session_state.tarhely_torzs = pd.concat([st.session_state.tarhely_torzs, pd.DataFrame([{
+                            "Tárhely": uj_t_kod, "Max Kapacitás": uj_t_kap, "ADR/Raktár Típus": uj_t_tipus
+                        }])], ignore_index=True)
+                        st.success(f"✅ Tárhely {uj_t_kod} elmentve!")
+                        st.rerun()
+    elif admin_pin_input != "":
+        st.error("❌ Helytelen PIN Kód! (A PIN: Coca-cola20)")
