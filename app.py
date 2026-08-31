@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import io
 
 # 1. OLDALBEÁLLÍTÁS
-st.set_page_config(page_title="WMS Raktárirányító & ADR Rendszer", layout="wide")
+st.set_page_config(page_title="WMS Gyógyszer- & ADR Raktárirányító", layout="wide")
 
 LOGIN_PASSWORD = "wms2026"
 ADMIN_PIN = "Coca-cola20"
@@ -14,7 +13,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("🔒 WMS Raktárirányító Rendszer - Belépés")
+    st.title("🔒 WMS Gyógyszer- & Raktárirányító Rendszer - Belépés")
     with st.form("login_form"):
         password_input = st.text_input("Belépési Jelszó", type="password")
         if st.form_submit_button("Belépés"):
@@ -28,32 +27,31 @@ if not st.session_state.authenticated:
 # 3. INICIALIZÁLÁS (SESSION STATE)
 if "tarhely_torzs" not in st.session_state:
     st.session_state.tarhely_torzs = pd.DataFrame([
-        {"Tárhely": "A-01-01", "Max Kapacitás": 100, "ADR Engedély": "Általános"},
-        {"Tárhely": "A-01-02", "Max Kapacitás": 50, "ADR Engedély": "ADR 3 (Gyúlékony)"},
-        {"Tárhely": "B-02-01", "Max Kapacitás": 20, "ADR Engedély": "ADR 8 (Maró)"},
-        {"Tárhely": "C-03-02", "Max Kapacitás": 10, "ADR Engedély": "Általános"},
-        {"Tárhely": "D-01-01", "Max Kapacitás": 200, "ADR Engedély": "ADR 5.1 (Oxidáló)"}
+        {"Tárhely": "A-01-01", "Max Kapacitás": 100, "ADR/Raktár Típus": "Általános"},
+        {"Tárhely": "A-01-02", "Max Kapacitás": 50, "ADR/Raktár Típus": "ADR 3 (Gyúlékony)"},
+        {"Tárhely": "B-02-01", "Max Kapacitás": 20, "ADR/Raktár Típus": "ADR 8 (Maró)"},
+        {"Tárhely": "MED-01", "Max Kapacitás": 500, "ADR/Raktár Típus": "Gyógyszerraktár (Hűtött 2-8°C)"},
+        {"Tárhely": "MED-02", "Max Kapacitás": 1000, "ADR/Raktár Típus": "Gyógyszerraktár (Szobahőfok)"}
     ])
 
 if "cikktorzs" not in st.session_state:
     st.session_state.cikktorzs = pd.DataFrame([
-        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "ADR Osztály": "Nem ADR", "Biztonsági készlet": 5, "Rendelésköteles készlet": 12, "Éves Értékforgalom (Ft)": 15000000},
-        {"Cikkszám": "ART-002", "Megnevezés": "Ipari Oldószer (Acetón)", "ADR Osztály": "ADR 3", "Biztonsági készlet": 10, "Rendelésköteles készlet": 20, "Éves Értékforgalom (Ft)": 4500000},
-        {"Cikkszám": "ART-003", "Megnevezés": "Sósav Oldat 37%", "ADR Osztály": "ADR 8", "Biztonsági készlet": 3, "Rendelésköteles készlet": 8, "Éves Értékforgalom (Ft)": 800000},
-        {"Cikkszám": "ART-004", "Megnevezés": "Hidrogén-peroxid 50%", "ADR Osztály": "ADR 5.1", "Biztonsági készlet": 5, "Rendelésköteles készlet": 15, "Éves Értékforgalom (Ft)": 200000}
+        {"Cikkszám": "MED-001", "Megnevezés": "Algopyrin 500mg", "Típus": "Gyógyszer (Vény nélküli)", "ADR Osztály": "Nem ADR", "Biztonsági készlet": 20, "Rendelésköteles készlet": 50, "Éves Értékforgalom (Ft)": 5000000},
+        {"Cikkszám": "MED-002", "Megnevezés": "Xanax 0.5mg", "Típus": "Gyógyszer (Vényköteles / Szigorú)", "ADR Osztály": "Nem ADR", "Biztonsági készlet": 10, "Rendelésköteles készlet": 30, "Éves Értékforgalom (Ft)": 8000000},
+        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Típus": "Általános Cikk", "ADR Osztály": "Nem ADR", "Biztonsági készlet": 5, "Rendelésköteles készlet": 12, "Éves Értékforgalom (Ft)": 15000000},
+        {"Cikkszám": "ART-002", "Megnevezés": "Ipari Oldószer (Acetón)", "Típus": "Veszélyes Áru", "ADR Osztály": "ADR 3", "Biztonsági készlet": 10, "Rendelésköteles készlet": 20, "Éves Értékforgalom (Ft)": 4500000}
     ])
 
 if "sarzs_keszlet" not in st.session_state:
     st.session_state.sarzs_keszlet = pd.DataFrame([
+        {"SarzsID": "S-MED-01", "Cikkszám": "MED-001", "Megnevezés": "Algopyrin 500mg", "Mennyiség": 40, "Zárolt_Mennyiség": 0, "Tárhely": "MED-02", "Beérkezés": "2026-01-10", "Lejárat": "2027-12-31", "Beszerzési Ár": 1200},
+        {"SarzsID": "S-MED-02", "Cikkszám": "MED-002", "Megnevezés": "Xanax 0.5mg", "Mennyiség": 15, "Zárolt_Mennyiség": 0, "Tárhely": "MED-01", "Beérkezés": "2026-02-01", "Lejárat": "2026-10-15", "Beszerzési Ár": 3500},
         {"SarzsID": "S-101", "Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Mennyiség": 10, "Zárolt_Mennyiség": 0, "Tárhely": "A-01-01", "Beérkezés": "2026-01-10", "Lejárat": "2028-01-10", "Beszerzési Ár": 240000},
-        {"SarzsID": "S-102", "Cikkszám": "ART-001", "Megnevezés": "Laptop Dell Latitude", "Mennyiség": 5, "Zárolt_Mennyiség": 3, "Tárhely": "C-03-02", "Beérkezés": "2026-02-01", "Lejárat": "2028-02-01", "Beszerzési Ár": 260000},
-        {"SarzsID": "S-201", "Cikkszám": "ART-002", "Megnevezés": "Ipari Oldószer (Acetón)", "Mennyiség": 30, "Zárolt_Mennyiség": 0, "Tárhely": "A-01-02", "Beérkezés": "2026-01-15", "Lejárat": "2027-06-30", "Beszerzési Ár": 12000},
-        {"SarzsID": "S-301", "Cikkszám": "ART-003", "Megnevezés": "Sósav Oldat 37%", "Mennyiség": 8, "Zárolt_Mennyiség": 0, "Tárhely": "B-02-01", "Beérkezés": "2026-01-20", "Lejárat": "2029-01-01", "Beszerzési Ár": 8500},
-        {"SarzsID": "S-401", "Cikkszám": "ART-004", "Megnevezés": "Hidrogén-peroxid 50%", "Mennyiség": 25, "Zárolt_Mennyiség": 0, "Tárhely": "D-01-01", "Beérkezés": "2026-01-05", "Lejárat": "2030-01-01", "Beszerzési Ár": 15000}
+        {"SarzsID": "S-201", "Cikkszám": "ART-002", "Megnevezés": "Ipari Oldószer (Acetón)", "Mennyiség": 30, "Zárolt_Mennyiség": 0, "Tárhely": "A-01-02", "Beérkezés": "2026-01-15", "Lejárat": "2027-06-30", "Beszerzési Ár": 12000}
     ])
 
 if "naplo" not in st.session_state:
-    st.session_state.naplo = pd.DataFrame(columns=["Dátum", "Művelet", "Cikkszám", "Megnevezés", "Mennyiség", "SarzsID", "Tárhely", "Stratégia", "Beszerzési Ár", "Felhasználó"])
+    st.session_state.naplo = pd.DataFrame(columns=["Dátum", "Művelet", "Cikkszám", "Megnevezés", "Mennyiség", "SarzsID", "Tárhely", "Stratégia/Megjegyzés", "Beszerzési Ár", "Felhasználó"])
 
 # 4. NAVIGÁCIÓ
 st.sidebar.title("📌 Rendszer Menü")
@@ -62,22 +60,25 @@ if st.sidebar.button("🚪 Kijelentkezés"):
     st.rerun()
 
 menu = st.sidebar.radio("Válassz Modult:", [
-    "📋 Pillanatnyi Készlet & Rendszint", 
+    "📋 Pillanatnyi Készlet & Riasztások", 
+    "💊 Gyógyszerraktár & FEFO Kiadás",
     "📊 ABC Elemzés (Leírással)",
-    "📥 ADR Bevételezés & Tárhely Ellenőrzés", 
-    "📤 Komissiózás & Kiszedési Lista", 
-    "🧾 Leltár, Módosítás & Export",
+    "📥 Áru Bevételezés (ADR & Gyógyszer)", 
+    "📤 Általános Komissiózás", 
+    "🧾 Leltár & Korrekció (Módosítás)",
     "📜 Árumozgás Napló",
     "⚙️ Adminisztráció"
 ])
 
-st.title("📦 WMS Raktárirányító & ADR Veszélyes Áru Rendszer")
+st.title("💊📦 WMS Gyógyszer- & Általános Raktárirányító Rendszer")
 
-# MODUL 1: PILLANATNYI KÉSZLET
-if menu == "📋 Pillanatnyi Készlet & Rendszint":
-    st.header("📋 Pillanatnyi Raktárkészlet és Zárolások")
+# MODUL 1: PILLANATNYI KÉSZLET & RIASZTÁSOK
+if menu == "📋 Pillanatnyi Készlet & Riasztások":
+    st.header("📋 Pillanatnyi Raktárkészlet és Riasztások")
     
     figyelmeztetesek = []
+    ma = datetime.date.today()
+    
     for _, cikk in st.session_state.cikktorzs.iterrows():
         c_kod = cikk["Cikkszám"]
         fizz = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == c_kod]["Mennyiség"].sum() if not st.session_state.sarzs_keszlet.empty else 0
@@ -89,17 +90,24 @@ if menu == "📋 Pillanatnyi Készlet & Rendszint":
         elif szabad <= cikk["Rendelésköteles készlet"]:
             figyelmeztetesek.append((f"⚠️ **UTÁNRENDELÉS SZÜKSÉGES!** A(z) **{cikk['Megnevezés']} ({c_kod})** elérte a rendelési küszöböt ({szabad} / {cikk['Rendelésköteles készlet']} db).", "warning"))
 
+    if not st.session_state.sarzs_keszlet.empty:
+        for _, sarzs in st.session_state.sarzs_keszlet.iterrows():
+            lejarat_dt = datetime.datetime.strptime(sarzs["Lejárat"], "%Y-%m-%d").date()
+            napok_hatra = (lejarat_dt - ma).days
+            if napok_hatra <= 90:
+                figyelmeztetesek.append((f"⏳ **KÖZELI LEJÁRAT!** Sarzs **{sarzs['SarzsID']}** ({sarzs['Megnevezés']}) lejár **{sarzs['Lejárat']}** napon belül! ({napok_hatra} nap van hátra)", "warning"))
+
     if figyelmeztetesek:
-        st.subheader("🔔 Készlet Riasztások & Teendők")
+        st.subheader("🔔 Készlet & Lejárati Riasztások")
         for üzenet, tipus in figyelmeztetesek:
             if tipus == "error": st.error(üzenet)
             else: st.warning(üzenet)
         st.divider()
 
-    st.subheader("📦 Tárhely- és Sarzsalapú Részletes Készlet")
+    st.subheader("📦 Sarzsalapú Részletes Készlet")
     st.dataframe(st.session_state.sarzs_keszlet, use_container_width=True)
     
-    st.subheader("📊 Cikkszámonkénti Védelmi Szintek")
+    st.subheader("📊 Cikkszámonkénti Összesítő")
     osszesito = []
     for _, cikk in st.session_state.cikktorzs.iterrows():
         c_kod = cikk["Cikkszám"]
@@ -112,32 +120,81 @@ if menu == "📋 Pillanatnyi Készlet & Rendszint":
         elif szabad <= cikk["Rendelésköteles készlet"]: allapot = "🟡 Utánrendelés szükséges"
             
         osszesito.append({
-            "Cikkszám": c_kod, "Megnevezés": cikk["Megnevezés"], "ADR": cikk["ADR Osztály"],
-            "Fizikai Készlet": fizz, "Zárolt (Hard Lock)": zarolt, "Szabad Készlet": szabad,
+            "Cikkszám": c_kod, "Megnevezés": cikk["Megnevezés"], "Típus": cikk["Típus"],
+            "Fizikai Készlet": fizz, "Zárolt": zarolt, "Szabad Készlet": szabad,
             "Biztonsági Limit": cikk["Biztonsági készlet"], "Utánrendelési Limit": cikk["Rendelésköteles készlet"], "Státusz": allapot
         })
     st.dataframe(pd.DataFrame(osszesito), use_container_width=True)
 
-# MODUL 2: ABC ELEMZÉS
-elif menu == "📊 ABC Elemzés (Leírással)":
-    st.header("📊 ABC Elemzés (Értékalapú Pareto Raktársorolás)")
-    
-    st.markdown("""
-    ### 💡 Mi az az ABC Elemzés a Raktározásban?
-    Az ABC elemzés a **Pareto-elv (80/20-as szabály)** alapján kategóriákba sorolja a termékeket az éves értékforgalmuk alapján. 
-    Ez határozza meg a termékek **raktári elhelyezését** (közel az expediálási kapuhoz) és a leltározási gyakoriságot:
-    
-    * **'A' kategória (Kiemelt érték - kb. 80% értékforgalom):** A raktár legkönyebben elérhető tárhelyeire kerülnek. Gyakori, szigorú ellenőrzést igényelnek.
-    * **'B' kategória (Közepes érték - kb. 15% értékforgalom):** Átlagos forgási sebességű és elhelyezésű termékek.
-    * **'C' kategória (Alacsony érték - kb. 5% értékforgalom):** A raktár távolabbi/felsőbb tárhelyeire kerülnek, ritkább leltározással.
-    """)
+# MODUL 2: GYÓGYSZERRAKTÁR & FEFO
+elif menu == "💊 Gyógyszerraktár & FEFO Kiadás":
+    st.header("💊 Gyógyszerraktári Modul & FEFO Kiadás")
+    st.markdown("> **Gyógyszerészeti Szabályozás:** FEFO (First Expired, First Out) elv kötelező. Vényköteles terméknél az Orvosi Vény azonosító megadása kötelező!")
     st.divider()
     
-    df_abc = st.session_state.cikktorzs.copy()
-    df_abc = df_abc.sort_values(by="Éves Értékforgalom (Ft)", ascending=False)
+    gyogyszerek = st.session_state.cikktorzs[st.session_state.cikktorzs["Típus"].str.contains("Gyógyszer")]
+    gyogyszer_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']} ({row['Típus']})": row['Cikkszám'] for _, row in gyogyszerek.iterrows()}
     
+    if gyogyszer_opciok:
+        kivalasztott_label = st.selectbox("Válassz Kiadandó Gyógyszert:", list(gyogyszer_opciok.keys()))
+        kivalasztott_cikkszam = gyogyszer_opciok[kivalasztott_label]
+        cikk_info = gyogyszerek[gyogyszerek["Cikkszám"] == kivalasztott_cikkszam].iloc[0]
+        
+        is_venykoteles = "Vényköteles" in cikk_info["Típus"]
+        
+        with st.form("gyogyszer_kiadas_form"):
+            mennyiseg = st.number_input("Kiadandó mennyiség (doboz/db)", min_value=1, value=2)
+            veny_szam = st.text_input("Orvosi Vény azonosító / Vény Kód (Vénykötelesnél KÖTELEZŐ)" if is_venykoteles else "Vény azonosító (Opcionális)")
+            kiado_szemely = st.text_input("Kiadó Gyógyszerész / Raktáros neve", value="Dr. Gyógyszerész")
+            
+            submit_gyogyszer = st.form_submit_button("💊 Gyógyszer Kiadása (FEFO elv alapján)")
+            
+            if submit_gyogyszer:
+                if is_venykoteles and not veny_szam.strip():
+                    st.error("❌ **HIÁNYZÓ VÉNY!** Vényköteles gyógyszer nem adható ki érvényes Vény Azonosító nélkül!")
+                else:
+                    elerheto = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam].copy()
+                    elerheto["Szabad"] = elerheto["Mennyiség"] - elerheto["Zárolt_Mennyiség"]
+                    elerheto = elerheto[elerheto["Szabad"] > 0]
+                    
+                    össz_szabad = elerheto["Szabad"].sum()
+                    
+                    if mennyiseg > össz_szabad:
+                        st.error(f"🚫 **NINCS ELÉG KÉSZLET!** Szabadon elérhető: {össz_szabad} db | Kért: {mennyiseg} db")
+                    else:
+                        elerheto = elerheto.sort_values(by="Lejárat", ascending=True)
+                        maradek = mennyiseg
+                        kiadas_details = []
+                        
+                        for idx, row in elerheto.iterrows():
+                            if maradek <= 0: break
+                            levon = min(row["Szabad"], maradek)
+                            st.session_state.sarzs_keszlet.loc[st.session_state.sarzs_keszlet["SarzsID"] == row["SarzsID"], "Mennyiség"] -= levon
+                            maradek -= levon
+                            
+                            kiadas_details.append({
+                                "SarzsID": row["SarzsID"], "Tárhely": row["Tárhely"], "Lejárat": row["Lejárat"], "Mennyiség": levon
+                            })
+                            
+                            st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
+                                "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "Művelet": "GYÓGYSZER KIADÁS (FEFO)", "Cikkszám": kivalasztott_cikkszam,
+                                "Megnevezés": row["Megnevezés"], "Mennyiség": levon, "SarzsID": row["SarzsID"],
+                                "Tárhely": row["Tárhely"], "Stratégia/Megjegyzés": f"FEFO | Vény: {veny_szam if veny_szam else 'Nincs'}", "Beszerzési Ár": row["Beszerzési Ár"], "Felhasználó": kiado_szemely
+                            }])], ignore_index=True)
+                        
+                        st.session_state.sarzs_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Mennyiség"] > 0]
+                        st.success("✅ **GYÓGYSZER KIADÁS SIKERES!**")
+                        st.table(pd.DataFrame(kiadas_details))
+    else:
+        st.info("Nincs gyógyszer kategóriájú termék a cikktörzsben.")
+
+# MODUL 3: ABC ELEMZÉS
+elif menu == "📊 ABC Elemzés (Leírással)":
+    st.header("📊 ABC Elemzés (Értékalapú Pareto Raktársorolás)")
+    df_abc = st.session_state.cikktorzs.copy().sort_values(by="Éves Értékforgalom (Ft)", ascending=False)
     teljes_forgalom = df_abc["Éves Értékforgalom (Ft)"].sum()
-    df_abc["Forgalmi Arány (%)"] = (df_abc["Éves Értékforgalom (Ft)"] / teljes_forgalom) * 100
+    df_abc["Forgalmi Arány (%)"] = (df_abc["Éves Értékforgalom (Ft)"] / teljes_forgalom) * 100 if teljes_forgalom > 0 else 0
     df_abc["Kumulált (%)"] = df_abc["Forgalmi Arány (%)"].cumsum()
     
     def besorolas(kum_pct):
@@ -146,26 +203,24 @@ elif menu == "📊 ABC Elemzés (Leírással)":
         else: return "🔴 'C' Osztály (Alacsony)"
         
     df_abc["ABC Osztály"] = df_abc["Kumulált (%)"].apply(besorolas)
-    st.dataframe(df_abc[["Cikkszám", "Megnevezés", "Éves Értékforgalom (Ft)", "Forgalmi Arány (%)", "Kumulált (%)", "ABC Osztály"]], use_container_width=True)
+    st.dataframe(df_abc[["Cikkszám", "Megnevezés", "Típus", "Éves Értékforgalom (Ft)", "Forgalmi Arány (%)", "Kumulált (%)", "ABC Osztály"]], use_container_width=True)
 
-# MODUL 3: ADR BEVÉTELEZÉS
-elif menu == "📥 ADR Bevételezés & Tárhely Ellenőrzés":
-    st.header("📥 Áru Bevételezés ADR Összeférhetőségi Vizsgálattal")
+# MODUL 4: ÁRU BEVÉTELEZÉS (ADR & GYÓGYSZER)
+elif menu == "📥 Áru Bevételezés (ADR & Gyógyszer)":
+    st.header("📥 Bevételezés Raktártípus & ADR Összeférhetőséggel")
     
-    termek_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']} ({row['ADR Osztály']})": row['Cikkszám'] for _, row in st.session_state.cikktorzs.iterrows()}
-    kivalasztott_termek_label = st.selectbox("Bevételezendő Termék", list(termek_opciok.keys()))
-    kivalasztott_cikkszam = termek_opciok[kivalasztott_termek_label]
+    termek_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']} ({row['Típus']} / {row['ADR Osztály']})": row['Cikkszám'] for _, row in st.session_state.cikktorzs.iterrows()}
+    kivalasztott_cikkszam = termek_opciok[st.selectbox("Bevételezendő Termék", list(termek_opciok.keys()))]
     termek_info = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == kivalasztott_cikkszam].iloc[0]
     
     with st.form("bevételezés_form"):
         col1, col2 = st.columns(2)
         with col1:
-            mennyiseg = st.number_input("Bevételezendő mennyiség (db)", min_value=1, value=5)
-            tarhely_lista = st.session_state.tarhely_torzs["Tárhely"].tolist()
-            tarhely = st.selectbox("Cél Tárhely Kiválasztása", tarhely_lista)
+            mennyiseg = st.number_input("Bevételezendő mennyiség (db)", min_value=1, value=10)
+            tarhely = st.selectbox("Cél Tárhely", st.session_state.tarhely_torzs["Tárhely"].tolist())
         with col2:
-            beszerzesi_ar = st.number_input("Beszerzési Egységár (Ft)", min_value=0, value=15000)
-            lejarat = st.date_input("Lejárati dátum", value=datetime.date(2028, 12, 31))
+            beszerzesi_ar = st.number_input("Beszerzési Egységár (Ft)", min_value=0, value=2500)
+            lejarat = st.date_input("Lejárati dátum", value=datetime.date(2027, 12, 31))
             
         diak_nev = st.text_input("Kezelő neve", value="Raktáros")
         submitted = st.form_submit_button("Bevételezés Rögzítése")
@@ -173,213 +228,157 @@ elif menu == "📥 ADR Bevételezés & Tárhely Ellenőrzés":
         if submitted:
             tarhely_info = st.session_state.tarhely_torzs[st.session_state.tarhely_torzs["Tárhely"] == tarhely].iloc[0]
             adr_cikk = termek_info["ADR Osztály"]
-            adr_tarhely = tarhely_info["ADR Engedély"]
+            tipus_cikk = termek_info["Típus"]
+            tarhely_tipus = tarhely_info["ADR/Raktár Típus"]
             
-            if adr_cikk != "Nem ADR" and adr_cikk not in adr_tarhely and adr_tarhely != "Általános":
-                st.error(f"🚫 **ADR ÖSSZEFÉRHETETLENSÉG!** A(z) **{adr_cikk}** besorolású termék nem tárolható ezen a tárhelyen: **{tarhely}** ({adr_tarhely})!")
+            if "Gyógyszer" in tipus_cikk and "Gyógyszerraktár" not in tarhely_tipus:
+                st.error(f"🚫 **HIBA!** Gyógyszer csak Gyógyszerraktári tárhelyre bevételezhető! ({tarhely} típusa: {tarhely_tipus})")
+            elif adr_cikk != "Nem ADR" and adr_cikk not in tarhely_tipus and tarhely_tipus != "Általános":
+                st.error(f"🚫 **ADR ÖSSZEFÉRHETETLENSÉG!** {adr_cikk} nem tárolható itt: {tarhely}")
             else:
-                max_kapacitas = tarhely_info["Max Kapacitás"]
-                j_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Tárhely"] == tarhely]["Mennyiség"].sum() if not st.session_state.sarzs_keszlet.empty else 0
-                szabad = max_kapacitas - j_keszlet
+                uj_sarzs_id = f"S-{len(st.session_state.sarzs_keszlet) + 101}"
+                uj_sarzs = {
+                    "SarzsID": uj_sarzs_id, "Cikkszám": kivalasztott_cikkszam, "Megnevezés": termek_info["Megnevezés"],
+                    "Mennyiség": mennyiseg, "Zárolt_Mennyiség": 0, "Tárhely": tarhely,
+                    "Beérkezés": datetime.date.today().strftime("%Y-%m-%d"), "Lejárat": lejarat.strftime("%Y-%m-%d"), "Beszerzési Ár": beszerzesi_ar
+                }
+                st.session_state.sarzs_keszlet = pd.concat([st.session_state.sarzs_keszlet, pd.DataFrame([uj_sarzs])], ignore_index=True)
                 
-                if mennyiseg > szabad:
-                    st.error(f"🚫 **KAPACITÁS HIÁNY!** A(z) {tarhely} tárhelyen csak {szabad} db szabad hely van.")
-                else:
-                    uj_sarzs_id = f"S-{len(st.session_state.sarzs_keszlet) + 101}"
-                    uj_sarzs = {
-                        "SarzsID": uj_sarzs_id, "Cikkszám": kivalasztott_cikkszam, "Megnevezés": termek_info["Megnevezés"],
-                        "Mennyiség": mennyiseg, "Zárolt_Mennyiség": 0, "Tárhely": tarhely,
-                        "Beérkezés": datetime.date.today().strftime("%Y-%m-%d"), "Lejárat": lejarat.strftime("%Y-%m-%d"), "Beszerzési Ár": beszerzesi_ar
-                    }
-                    st.session_state.sarzs_keszlet = pd.concat([st.session_state.sarzs_keszlet, pd.DataFrame([uj_sarzs])], ignore_index=True)
-                    
-                    st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
-                        "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "Művelet": "BEVÉTELEZÉS", "Cikkszám": kivalasztott_cikkszam,
-                        "Megnevezés": termek_info["Megnevezés"], "Mennyiség": mennyiseg, "SarzsID": uj_sarzs_id,
-                        "Tárhely": tarhely, "Stratégia": "-", "Beszerzési Ár": beszerzesi_ar, "Felhasználó": diak_nev
-                    }])], ignore_index=True)
-                    
-                    st.success(f"✅ Bevételezés sikeres! Tárhely: {tarhely} | Sarzs: {uj_sarzs_id}")
+                st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
+                    "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Művelet": "BEVÉTELEZÉS", "Cikkszám": kivalasztott_cikkszam,
+                    "Megnevezés": termek_info["Megnevezés"], "Mennyiség": mennyiseg, "SarzsID": uj_sarzs_id,
+                    "Tárhely": tarhely, "Stratégia/Megjegyzés": "-", "Beszerzési Ár": beszerzesi_ar, "Felhasználó": diak_nev
+                }])], ignore_index=True)
+                st.success(f"✅ Sikeres Bevételezés! SarzsID: {uj_sarzs_id}")
 
-# MODUL 4: KOMISSIÓZÁS ÉS KISZEDÉSI LISTA
-elif menu == "📤 Komissiózás & Kiszedési Lista":
-    st.header("📤 Komissiózás (Picking) & Kiszedési Lista Generálás")
-    
+# MODUL 5: ÁLTALÁNOS KOMISSIÓZÁS
+elif menu == "📤 Általános Komissiózás":
+    st.header("📤 Általános Cikk Komissiózás (FIFO / LIFO / FEFO)")
     termek_opciok = {f"{row['Cikkszám']} - {row['Megnevezés']}": row['Cikkszám'] for _, row in st.session_state.cikktorzs.iterrows()}
-    kivalasztott_termek_label = st.selectbox("Kiadandó Termék", list(termek_opciok.keys()))
-    kivalasztott_cikkszam = termek_opciok[kivalasztott_termek_label]
+    kivalasztott_cikkszam = termek_opciok[st.selectbox("Kiadandó Termék", list(termek_opciok.keys()))]
     
-    cikk_info = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == kivalasztott_cikkszam].iloc[0]
-    fizz_aktuális = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam]["Mennyiség"].sum() if not st.session_state.sarzs_keszlet.empty else 0
-    zarolt_aktuális = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam]["Zárolt_Mennyiség"].sum() if not st.session_state.sarzs_keszlet.empty else 0
-    szabad_aktuális = fizz_aktuális - zarolt_aktuális
+    strategia = st.radio("Kibocsátási Stratégia:", ["FIFO", "LIFO", "FEFO", "HIFO", "LOFO"])
     
-    st.info(f"ℹ️ **Aktuális Készlet Állapot:** Szabadon kiadható: **{szabad_aktuális} db** | Biztonsági limit: **{cikk_info['Biztonsági készlet']} db** | Zárolt: {zarolt_aktuális} db")
-    
-    strategia = st.radio("Kibocsátási Stratégia (Picking Logic):", ["FIFO", "LIFO", "FEFO", "HIFO", "LOFO"])
-    
-    with st.form("kiadas_form"):
-        mennyiseg = st.number_input("Kiadandó mennyiség (db)", min_value=1, value=3)
-        admin_override = st.checkbox("🔓 Adminisztrátori felülbírálás (Biztonsági készlet terhére)")
-        admin_pin_input = st.text_input("Admin PIN (csak felülbírálás esetén)", type="password")
-        diak_nev = st.text_input("Kezelő / Komissiózó neve", value="Raktáros")
-        
-        submitted = st.form_submit_button("🛒 Komissiózási Lista Generálása")
-        
+    with st.form("general_kiadas_form"):
+        mennyiseg = st.number_input("Kiadandó mennyiség (db)", min_value=1, value=2)
+        submitted = st.form_submit_button("🛒 Kiszedési Lista Generálása")
         if submitted:
-            biztonsagi_limit = cikk_info["Biztonsági készlet"]
-            elerheto_sarzsok = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam].copy()
-            elerheto_sarzsok["Szabad_Mennyiség"] = elerheto_sarzsok["Mennyiség"] - elerheto_sarzsok["Zárolt_Mennyiség"]
-            elerheto_sarzsok = elerheto_sarzsok[elerheto_sarzsok["Szabad_Mennyiség"] > 0]
+            elerheto = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Cikkszám"] == kivalasztott_cikkszam].copy()
+            elerheto["Szabad"] = elerheto["Mennyiség"] - elerheto["Zárolt_Mennyiség"]
             
-            maradando = fizz_aktuális - mennyiseg
-            
-            if mennyiseg > szabad_aktuális:
-                st.error(f"🚫 **NEM TUDJA KIADNI! NINCS ELÉG SZABAD KÉSZLET!**\n\nKért mennyiség: **{mennyiseg} db** | Jelenleg szabadon elérhető: **{szabad_aktuális} db**.")
-            elif maradando < biztonsagi_limit and not admin_override:
-                st.error(f"🚫 **KIADÁS BLOKKOLVA! BIZTONSÁGI KÉSZLET VÉDELEM!**\n\nA kiadás után a készlet **{maradando} db**-ra csökkenne, ami megsértené a kötelező Biztonsági Készletet (**{biztonsagi_limit} db**)! Utánrendelés szükséges!")
-            elif admin_override and admin_pin_input != ADMIN_PIN:
-                st.error("❌ Helytelen Admin PIN kód!")
+            if mennyiseg > elerheto["Szabad"].sum():
+                st.error("🚫 Nincs elég szabad készlet!")
             else:
-                if estrategia == "FIFO": elerheto_sarzsok = elerheto_sarzsok.sort_values(by="Beérkezés", ascending=True)
-                elif estrategia == "LIFO": elerheto_sarzsok = elerheto_sarzsok.sort_values(by="Beérkezés", ascending=False)
-                elif estrategia == "FEFO": elerheto_sarzsok = elerheto_sarzsok.sort_values(by="Lejárat", ascending=True)
-                elif estrategia == "HIFO": elerheto_sarzsok = elerheto_sarzsok.sort_values(by="Beszerzési Ár", ascending=False)
-                elif estrategia == "LOFO": elerheto_sarzsok = elerheto_sarzsok.sort_values(by="Beszerzési Ár", ascending=True)
+                if estrategia == "FIFO": elerheto = elerheto.sort_values(by="Beérkezés", ascending=True)
+                elif estrategia == "FEFO": elerheto = elerheto.sort_values(by="Lejárat", ascending=True)
                 
-                maradek_igeny = mennyiseg
-                komissio_lista = []
-                
-                for idx, row in elerheto_sarzsok.iterrows():
-                    if maradek_igeny <= 0: break
-                    levonando = min(row["Szabad_Mennyiség"], maradek_igeny)
-                    st.session_state.sarzs_keszlet.loc[st.session_state.sarzs_keszlet["SarzsID"] == row["SarzsID"], "Mennyiség"] -= levonando
-                    maradek_igeny -= levonando
-                    
-                    komissio_lista.append({
-                        "Kiszedési Útvonal / Tárhely": row["Tárhely"],
-                        "Cikkszám": kivalasztott_cikkszam,
-                        "Megnevezés": row["Megnevezés"],
-                        "SarzsID": row["SarzsID"],
-                        "Kiszedendő Mennyiség": f"{levonando} db",
-                        "Stratégia": estrategia
-                    })
-                    
-                    st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
-                        "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "Művelet": "KIADÁS (KOMISSIÓ)", "Cikkszám": kivalasztott_cikkszam,
-                        "Megnevezés": row["Megnevezés"], "Mennyiség": levonando, "SarzsID": row["SarzsID"],
-                        "Tárhely": row["Tárhely"], "Stratégia": estrategia, "Beszerzési Ár": row["Beszerzési Ár"], "Felhasználó": diak_nev
-                    }])], ignore_index=True)
+                maradek = mennyiseg
+                lista = []
+                for idx, row in elerheto.iterrows():
+                    if maradek <= 0: break
+                    levon = min(row["Szabad"], maradek)
+                    st.session_state.sarzs_keszlet.loc[st.session_state.sarzs_keszlet["SarzsID"] == row["SarzsID"], "Mennyiség"] -= levon
+                    maradek -= levon
+                    lista.append({"Tárhely": row["Tárhely"], "SarzsID": row["SarzsID"], "Kiszedendő": levon})
                 
                 st.session_state.sarzs_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Mennyiség"] > 0]
-                
-                st.success("✅ **KOMISSIÓZÁSI UTASÍTÁS SIKERESEN GENERÁLVA!**")
-                
-                uj_maradando = szabad_aktuális - mennyiseg
-                if uj_maradando <= cikk_info["Rendelésköteles készlet"]:
-                    st.warning(f"⚠️ **FIGYELEM! UTÁNRENDELÉS SZÜKSÉGES!** A megmaradt készlet (**{uj_maradando} db**) elérte vagy megközelítette az Utánrendelési Limit szintjét (**{cikk_info['Rendelésköteles készlet']} db**).")
-                
-                df_komissio = pd.DataFrame(komissio_lista)
-                st.subheader("📝 Hivatalos Kiszedési Lista (Picking Sheet)")
-                st.table(df_komissio)
-                
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df_komissio.to_excel(writer, sheet_name='Kiszedési Lista', index=False)
-                
-                st.download_button(
-                    label="🖨️ Kiszedési Lista Letöltése (Excel/Nyomtatás)",
-                    data=buffer.getvalue(),
-                    file_name=f"kiszedesi_lista_{datetime.date.today()}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                st.success("✅ Kiszedési Utasítás Generálva!")
+                st.table(pd.DataFrame(lista))
 
-# MODUL 5: LELTÁR ÉS MÓDOSÍTÁS / KORREKCIÓ
-elif menu == "🧾 Leltár, Módosítás & Export":
-    st.header("🧾 Leltár Ellenőrzés és Készletkorrekció (Módosítás)")
-    
-    st.subheader("📊 Pillanatnyi Könyvszerinti Leltár")
+# MODUL 6: LELTÁR ÉS MÓDOSÍTÁS / KORREKCIÓ
+elif menu == "🧾 Leltár & Korrekció (Módosítás)":
+    st.header("🧾 Leltár Ellenőrzés és Készletkorrekció")
     st.dataframe(st.session_state.sarzs_keszlet, use_container_width=True)
-    
     st.divider()
-    st.subheader("🛠️ Leltáreltérés Módosítás (Fizikai Számlálás Korrekciója)")
     
+    st.subheader("🛠️ Leltáreltérés Módosítás")
     if not st.session_state.sarzs_keszlet.empty:
         sarzs_opciok = {f"{row['SarzsID']} - {row['Megnevezés']} (Tárhely: {row['Tárhely']} | Könyvelt: {row['Mennyiség']} db)": row['SarzsID'] for _, row in st.session_state.sarzs_keszlet.iterrows()}
-        kivalasztott_sarzs_label = st.selectbox("Módosítandó Sarzs Kiválasztása:", list(sarzs_opciok.keys()))
-        kivalasztott_sarzs_id = sarzs_opciok[kivalasztott_sarzs_label]
-        
+        kivalasztott_sarzs_id = sarzs_opciok[st.selectbox("Módosítandó Sarzs Kiválasztása:", list(sarzs_opciok.keys()))]
         sarzs_data = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["SarzsID"] == kivalasztott_sarzs_id].iloc[0]
         
         with st.form("leltar_korrekcio_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**Cikkszám:** {sarzs_data['Cikkszám']}")
-                st.write(f"**Megnevezés:** {sarzs_data['Megnevezés']}")
-                st.write(f"**Jelenlegi Könyvelt Mennyiség:** {sarzs_data['Mennyiség']} db")
+            uj_fizikai_mennyiseg = st.number_input("Ténylegesen megszámolt Fizikai Mennyiség (db):", min_value=0, value=int(sarzs_data['Mennyiség']))
+            ok_leiras = st.selectbox("Indok:", ["Leltárhiány (Selejt/Kár)", "Leltártöbblet (Talált áru)", "Sérülés / Minőségi Zárolás", "Adminisztrációs Korrekció"])
+            leltarozo_nev = st.text_input("Kezelő Neve:", value="Leltárfelelős")
+            
+            if st.form_submit_button("💾 Leltáreltérés Módosítása"):
+                regi = sarzs_data['Mennyiség']
+                kulonbseg = uj_fizikai_mennyiseg - regi
                 
-                uj_fizikai_mennyiseg = st.number_input("Ténylegesen megszámolt Fizikai Mennyiség (db):", min_value=0, value=int(sarzs_data['Mennyiség']))
-            
-            with col2:
-                ok_leiras = st.selectbox("Eltérés / Módosítás Indoka:", ["Leltárhiány (Selejt/Kár)", "Leltártöbblet (Talált áru)", "Sérülés / Minőségi Zárolás", "Adminisztrációs Korrekció"])
-                leltarozo_nev = st.text_input("Leltározó Kezelő Neve:", value="Leltárfelelős")
-            
-            submit_leltar = st.form_submit_button("💾 Leltáreltérés Módosítása & Készlet Frissítése")
-            
-            if submit_leltar:
-                regi_mennyiseg = sarzs_data['Mennyiség']
-                kulonbseg = uj_fizikai_mennyiseg - regi_mennyiseg
-                
-                # Készlet frissítés
                 if uj_fizikai_mennyiseg == 0:
                     st.session_state.sarzs_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["SarzsID"] != kivalasztott_sarzs_id]
                 else:
                     st.session_state.sarzs_keszlet.loc[st.session_state.sarzs_keszlet["SarzsID"] == kivalasztott_sarzs_id, "Mennyiség"] = uj_fizikai_mennyiseg
                 
-                # Naplózás
                 st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
                     "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "Művelet": f"LELTÁR KORREKCIÓ ({kulonbseg:+d} db)", "Cikkszám": sarzs_data["Cikkszám"],
                     "Megnevezés": sarzs_data["Megnevezés"], "Mennyiség": uj_fizikai_mennyiseg, "SarzsID": kivalasztott_sarzs_id,
-                    "Tárhely": sarzs_data["Tárhely"], "Stratégia": f"Indok: {ok_leiras}", "Beszerzési Ár": sarzs_data["Beszerzési Ár"], "Felhasználó": leltarozo_nev
+                    "Tárhely": sarzs_data["Tárhely"], "Stratégia/Megjegyzés": f"Indok: {ok_leiras}", "Beszerzési Ár": sarzs_data["Beszerzési Ár"], "Felhasználó": leltarozo_nev
                 }])], ignore_index=True)
-                
-                st.success(f"✅ Leltármódosítás sikeresen elmentve! Változás: **{kulonbseg:+d} db**. Az új fizikai készlet: **{uj_fizikai_mennyiseg} db**.")
+                st.success(f"✅ Leltármódosítás elmentve! Új készlet: {uj_fizikai_mennyiseg} db.")
                 st.rerun()
 
-    st.divider()
-    st.subheader("📥 Excel Exportálás")
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        st.session_state.sarzs_keszlet.to_excel(writer, sheet_name='Készlet', index=False)
-        st.session_state.cikktorzs.to_excel(writer, sheet_name='Cikktörzs', index=False)
-    
-    st.download_button(
-        label="📥 Teljes Leltár Letöltése (Excel)",
-        data=buffer.getvalue(),
-        file_name=f"leltar_{datetime.date.today()}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-# MODUL 6: NAPLÓ
+# MODUL 7: NAPLÓ
 elif menu == "📜 Árumozgás Napló":
     st.header("📜 Tranzakciós Árumozgás Napló")
-    if st.session_state.naplo.empty:
-        st.info("Még nem történt árumozgás.")
-    else:
-        st.dataframe(st.session_state.naplo, use_container_width=True)
+    st.dataframe(st.session_state.naplo, use_container_width=True)
 
-# MODUL 7: ADMINISZTRÁCIÓ
+# MODUL 8: ADMINISZTRÁCIÓ (ÚJ TERMÉK RÖGZÍTÉSÉVEL)
 elif menu == "⚙️ Adminisztráció":
-    st.header("⚙️ Adminisztrációs Beállítások")
-    pin = st.text_input("Adminisztrátori PIN kód", type="password")
-    if pin == ADMIN_PIN:
+    st.header("⚙️ Adminisztrációs Beállítások & Cikktörzs Kezelés")
+    
+    admin_pin_input = st.text_input("Adminisztrátori PIN Kód", type="password")
+    
+    if admin_pin_input == ADMIN_PIN:
         st.success("🔓 Admin hozzáférés engedélyezve.")
-        st.subheader("Tárhely Törzs")
-        st.dataframe(st.session_state.tarhely_torzs, use_container_width=True)
-        st.subheader("Cikktörzs")
-        st.dataframe(st.session_state.cikktorzs, use_container_width=True)
-    elif pin != "":
-        st.error("❌ Helytelen PIN kód!")
+        
+        tab1, tab2 = st.tabs(["📋 Jelenlegi Cikktörzs", "➕ Új Termék Rögzítése"])
+        
+        with tab1:
+            st.subheader("Regisztrált Cikkek Listája")
+            st.dataframe(st.session_state.cikktorzs, use_container_width=True)
+            
+        with tab2:
+            st.subheader("🆕 Új Cikk / Gyógyszer Hozzáadása a Cikktörzshöz")
+            with st.form("uj_termek_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    uj_cikkszam = st.text_input("Cikkszám (pl. MED-003 vagy ART-003)", value=f"ART-00{len(st.session_state.cikktorzs)+1}")
+                    uj_megnevezes = st.text_input("Termék Megnevezése", placeholder="pl. Paracetamol 500mg")
+                    uj_tipus = st.selectbox("Termék Típusa / Kategóriája", [
+                        "Gyógyszer (Vényköteles / Szigorú)",
+                        "Gyógyszer (Vény nélküli)",
+                        "Veszélyes Áru",
+                        "Általános Cikk"
+                    ])
+                with col2:
+                    uj_adr = st.selectbox("ADR Veszélyességi Osztály", ["Nem ADR", "ADR 3", "ADR 8", "ADR 6.1"])
+                    uj_bizt = st.number_input("Biztonsági Készlet Limit (db)", min_value=0, value=10)
+                    uj_rendel = st.number_input("Utánrendelési Küszöb (db)", min_value=0, value=25)
+                    uj_ertekesites = st.number_input("Becsült Éves Értékforgalom (Ft)", min_value=0, value=1000000)
+                
+                submit_uj_termek = st.form_submit_button("➕ Új Termék Elmentése")
+                
+                if submit_uj_termek:
+                    if not uj_cikkszam or not uj_megnevezes:
+                        st.error("❌ A Cikkszám és Megnevezés mezők kitöltése kötelező!")
+                    elif uj_cikkszam in st.session_state.cikktorzs["Cikkszám"].values:
+                        st.error(f"❌ A(z) **{uj_cikkszam}** cikkszám már létezik a rendszerben!")
+                    else:
+                        uj_elem = {
+                            "Cikkszám": uj_cikkszam,
+                            "Megnevezés": uj_megnevezes,
+                            "Típus": uj_tipus,
+                            "ADR Osztály": uj_adr,
+                            "Biztonsági készlet": uj_bizt,
+                            "Rendelésköteles készlet": uj_rendel,
+                            "Éves Értékforgalom (Ft)": uj_ertekesites
+                        }
+                        st.session_state.cikktorzs = pd.concat([st.session_state.cikktorzs, pd.DataFrame([uj_elem])], ignore_index=True)
+                        st.success(f"🎉 **{uj_megnevezes} ({uj_cikkszam})** sikeresen hozzáadva a Cikktörzshöz!")
+                        st.rerun()
+    elif admin_pin_input != "":
+        st.error("❌ Helytelen PIN Kód!")
