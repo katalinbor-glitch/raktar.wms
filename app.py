@@ -10,7 +10,9 @@ st.set_page_config(page_title="WMS Raktárirányítás & ADR Modul", layout="wid
 
 LOGIN_PASSWORD = "wms2026"
 
+# ==========================================
 # 1. BEJELENTKEZÉS
+# ==========================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
@@ -26,7 +28,9 @@ if not st.session_state.authenticated:
                 st.error("❌ Helytelen jelszó!")
     st.stop()
 
-# VONALKÓD GENERÁLÓ FÜGGVÉNY (RAM-ban készíti el a képet)
+# ==========================================
+# VONALKÓD GENERÁLÓ SEGÉDFÜGGVÉNY
+# ==========================================
 def generate_barcode_img(code_text):
     try:
         rv = io.BytesIO()
@@ -38,19 +42,22 @@ def generate_barcode_img(code_text):
     except Exception as e:
         return None
 
-# 2. INICIALIZÁLÁS
+# ==========================================
+# 2. INICIALIZÁLÁS (SESSION STATE)
+# ==========================================
 if "tarhely_torzs" not in st.session_state:
     st.session_state.tarhely_torzs = pd.DataFrame([
-        {"Tárhely": "A-01-01", "Típus": "Normál"},
+        {"Tárhely": "A-01-01", "Típus": "Normál Raktár"},
+        {"Tárhely": "A-01-02", "Típus": "Normál Raktár"},
         {"Tárhely": "ADR-SAFE-01", "Típus": "ADR Veszélyes Raktár"},
         {"Tárhely": "ADR-SAFE-02", "Típus": "ADR Veszélyes Raktár"}
     ])
 
 if "cikktorzs" not in st.session_state:
     st.session_state.cikktorzs = pd.DataFrame([
-        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell", "Vonalkód": "5901234567891", "Is_ADR": False, "UN_Szam": "-", "ADR_Osztaly": "-", "PG": "-", "ADR_Szorzo": 0},
-        {"Cikkszám": "ADR-901", "Megnevezés": "Ipari Oldószer (Acetón)", "Vonalkód": "5901234567892", "Is_ADR": True, "UN_Szam": "UN 1090", "ADR_Osztaly": "3 (Gyúlékony)", "PG": "II", "ADR_Szorzo": 3},
-        {"Cikkszám": "ADR-902", "Megnevezés": "Sósav oldat 30%", "Vonalkód": "5901234567893", "Is_ADR": True, "UN_Szam": "UN 1789", "ADR_Osztaly": "8 (Maró)", "PG": "II", "ADR_Szorzo": 3}
+        {"Cikkszám": "ART-001", "Megnevezés": "Laptop Dell", "Vonalkód": "5901234567891", "MinKeszlet": 5, "Is_ADR": False, "UN_Szam": "-", "ADR_Osztaly": "-", "PG": "-", "ADR_Szorzo": 0},
+        {"Cikkszám": "ADR-901", "Megnevezés": "Ipari Oldószer (Acetón)", "Vonalkód": "5901234567892", "MinKeszlet": 20, "Is_ADR": True, "UN_Szam": "UN 1090", "ADR_Osztaly": "3 (Gyúlékony)", "PG": "II", "ADR_Szorzo": 3},
+        {"Cikkszám": "ADR-902", "Megnevezés": "Sósav oldat 30%", "Vonalkód": "5901234567893", "MinKeszlet": 10, "Is_ADR": True, "UN_Szam": "UN 1789", "ADR_Osztaly": "8 (Maró)", "PG": "II", "ADR_Szorzo": 3}
     ])
 
 if "sarzs_keszlet" not in st.session_state:
@@ -66,74 +73,106 @@ if "naplo" not in st.session_state:
 if "kiadasi_kosar" not in st.session_state:
     st.session_state.kiadasi_kosar = []
 
-# NAVIGÁCIÓ
+# ==========================================
+# NAVIGÁCIÓ (BAL OLDALI MENÜ)
+# ==========================================
 st.sidebar.title("📦 WMS Navigáció")
 menu = st.sidebar.radio("Modulok", [
-    "📋 Pillanatnyi Készlet", 
+    "📋 Pillanatnyi Készlet & Riasztások", 
+    "📥 Áru Bevételezés",
+    "📤 Összesített Kiadás & Komissiózás", 
+    "📊 Leltár & Leltármódosítás",
     "🏷️ Vonalkód Generáló",
     "⚠️ ADR Veszélyes Áru Kezelés",
-    "📤 Összesített Kiadás & Komissiózás", 
     "📜 Árumozgás Napló (Excel Export)"
 ])
 
-# --- 1. PILLANATNYI KÉSZLET ---
-if menu == "📋 Pillanatnyi Készlet":
-    st.header("📋 Raktári Készlet (Normál és ADR)")
+# Kijelentkezés gomb a menü alján
+st.sidebar.markdown("---")
+if st.sidebar.button("🚪 Kijelentkezés"):
+    st.session_state.authenticated = False
+    st.rerun()
+
+# ==========================================
+# 1. PILLANATNYI KÉSZLET & RIASZTÁSOK
+# ==========================================
+if menu == "📋 Pillanatnyi Készlet & Riasztások":
+    st.header("📋 Raktári Készlet és Minimum Készlet Riasztások")
+    
+    if not st.session_state.sarzs_keszlet.empty:
+        osszesitett = st.session_state.sarzs_keszlet.groupby(["Cikkszám", "Megnevezés"]).agg({"Mennyiség": "sum"}).reset_index()
+        osszesitett = osszesitett.merge(st.session_state.cikktorzs[["Cikkszám", "MinKeszlet", "Is_ADR"]], on="Cikkszám", how="left")
+        
+        kevés_készlet = osszesitett[osszesitett["Mennyiség"] <= osszesitett["MinKeszlet"]]
+        if not kevés_készlet.empty:
+            st.error("⚠️ **MINIMUM KÉSZLET RIASZTÁS!** A következő termékekből kevés van raktáron:")
+            st.dataframe(kevés_készlet[["Cikkszám", "Megnevezés", "Mennyiség", "MinKeszlet"]], use_container_width=True)
+            
+        st.subheader("Összesített Készlet")
+        st.dataframe(osszesitett, use_container_width=True)
+    else:
+        st.info("Jelenleg a raktár teljesen üres.")
+
+    st.subheader("Részletes Sarzs Készlet (Tárhellyel és Lejárattal)")
     st.dataframe(st.session_state.sarzs_keszlet, use_container_width=True)
 
-# --- 2. VONALKÓD GENERÁLÓ MODUL ---
-elif menu == "🏷️ Vonalkód Generáló":
-    st.header("🏷️ Vonalkód Címke Nyomtatás & Generálás")
+# ==========================================
+# 2. ÁRU BEVÉTELEZÉS
+# ==========================================
+elif menu == "📥 Áru Bevételezés":
+    st.header("📥 Új Áru Bevételezése Raktárba")
     
-    termek_lista = {f"{row['Cikkszám']} - {row['Megnevezés']}": row['Vonalkód'] for _, row in st.session_state.cikktorzs.iterrows()}
-    kivalasztott = st.selectbox("Válassz terméket a vonalkód generáláshoz:", list(termek_lista.keys()))
-    
-    v_kod = termek_lista[kivalasztott]
-    st.write(f"**Regisztrált Vonalkód számsor:** `{v_kod}`")
-    
-    img = generate_barcode_img(v_kod)
-    if img:
-        st.image(img, caption=f"Generált vonalkód: {v_kod}", width=300)
-    else:
-        st.error("Nem sikerült a vonalkódot elkészíteni.")
+    with st.form("bevétel_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            termek_list = [f"{row['Cikkszám']} - {row['Megnevezés']}" for _, row in st.session_state.cikktorzs.iterrows()]
+            kivalasztott_termek = st.selectbox("Termék Kiválasztása", termek_list)
+            sarzs_id = st.text_input("Sarzs / Lot Szám", value=f"S-{datetime.datetime.now().strftime('%M%S')}")
+            mennyiseg = st.number_input("Bevételezett Mennyiség", min_value=1, value=50)
+            
+        with col2:
+            tarhely_list = st.session_state.tarhely_torzs["Tárhely"].tolist()
+            tarhely = st.selectbox("Cél Tárhely", tarhely_list)
+            lejarat = st.date_input("Lejárati Dátum", datetime.date(2027, 12, 31))
+            
+        if st.form_submit_button("📥 Bevételezés Rögzítése"):
+            cikk_kod = kivalasztott_termek.split(" - ")[0]
+            cikk_nev = kivalasztott_termek.split(" - ")[1]
+            
+            cikk_info = st.session_state.cikktorzs[st.session_state.cikktorzs["Cikkszám"] == cikk_kod].iloc[0]
+            is_adr = cikk_info["Is_ADR"]
+            
+            uj_sarzs = {
+                "SarzsID": sarzs_id,
+                "Cikkszám": cikk_kod,
+                "Megnevezés": cikk_nev,
+                "Mennyiség": mennyiseg,
+                "Tárhely": tarhely,
+                "Beérkezés": datetime.date.today().strftime("%Y-%m-%d"),
+                "Lejárat": lejarat.strftime("%Y-%m-%d"),
+                "Is_ADR": is_adr
+            }
+            
+            st.session_state.sarzs_keszlet = pd.concat([st.session_state.sarzs_keszlet, pd.DataFrame([uj_sarzs])], ignore_index=True)
+            
+            st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
+                "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Művelet": "BEVÉTEL",
+                "Cikkszám": cikk_kod,
+                "Megnevezés": cikk_nev,
+                "Mennyiség": mennyiseg,
+                "SarzsID": sarzs_id,
+                "Tárhely": tarhely,
+                "Felhasználó": "Raktáros",
+                "ADR_Pont": 0
+            }])], ignore_index=True)
+            
+            st.success(f"✅ Siker: {mennyiseg} db {cikk_nev} bevételezve a {tarhely} tárhelyre!")
+            st.rerun()
 
-# --- 3. ADR MODUL ---
-elif menu == "⚠️ ADR Veszélyes Áru Kezelés":
-    st.header("⚠️ ADR Veszélyes Áru Törzsadatok & Összeférhetőség")
-    
-    tab1, tab2 = st.tabs(["☣️ ADR Cikktörzs Nyilvántartás", "🔒 Tárhely Összeférhetőség"])
-    
-    with tab1:
-        st.subheader("Új ADR-es Termék Regisztrációja")
-        with st.form("adr_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                cikk = st.text_input("Cikkszám", value="ADR-903")
-                nev = st.text_input("Megnevezés", value="Akkumulátor Sav")
-                vonalkod = st.text_input("Vonalkód", value="5901234567899")
-                un_szam = st.text_input("UN-Szám", value="UN 2796")
-            with col2:
-                osztaly = st.selectbox("ADR Osztály", ["1 (Robbanó)", "2 (Gázok)", "3 (Gyúlékony)", "4.1 (Gyúlékony szilárd)", "5.1 (Oxidáló)", "6.1 (Mérgező)", "8 (Maró)", "9 (Egyéb)"])
-                pg = st.selectbox("Csomagolási Csoport (PG)", ["I (Nagyon veszélyes - Szorzó: 50)", "II (Közepesen veszélyes - Szorzó: 3)", "III (Kevésbé veszélyes - Szorzó: 1)"])
-                
-            if st.form_submit_button("ADR Termék Rögzítése"):
-                szorzo = 50 if "I " in pg else (3 if "II " in pg else 1)
-                uj_adr = {
-                    "Cikkszám": cikk, "Megnevezés": nev, "Vonalkód": vonalkod, "Is_ADR": True, 
-                    "UN_Szam": un_szam, "ADR_Osztaly": osztaly, "PG": pg.split(" ")[0], "ADR_Szorzo": szorzo
-                }
-                st.session_state.cikktorzs = pd.concat([st.session_state.cikktorzs, pd.DataFrame([uj_adr])], ignore_index=True)
-                st.success(f"✅ ADR Termék rögzítve: {nev} ({un_szam})")
-                st.rerun()
-
-        st.subheader("Jelenlegi ADR Cikktörzs")
-        adr_df = st.session_state.cikktorzs[st.session_state.cikktorzs["Is_ADR"] == True]
-        st.dataframe(adr_df, use_container_width=True)
-
-    with tab2:
-        st.warning("⚠️ **Biztonsági szabály:** Savak (Osztály 8) és Gyúlékony folyadékok (Osztály 3) nem kerülhetnek azonos közvetlen polcra!")
-
-# --- 4. ÖSSZESÍTETT KIADÁS ÉS ADR PONTSZÁMÍTÁS ---
+# ==========================================
+# 3. ÖSSZESÍTETT KIADÁS & KOMISSIÓZÁS
+# ==========================================
 elif menu == "📤 Összesített Kiadás & Komissiózás":
     st.header("📤 Kiadás & Komissiózási Lista (ADR Pontszámítással)")
     
@@ -238,7 +277,124 @@ elif menu == "📤 Összesített Kiadás & Komissiózás":
             st.markdown(html_bizonylat, unsafe_allow_html=True)
             st.success("✅ Komissiózási lista és ADR okmány elkészült!")
 
-# --- 5. NAPLÓ ÉS EXCEL EXPORT ---
+# ==========================================
+# 4. LELTÁR ÉS LELTÁRMÓDOSÍTÁS / KORREKCIÓ
+# ==========================================
+elif menu == "📊 Leltár & Leltármódosítás":
+    st.header("📊 Leltározás és Készletkorrekció")
+    
+    st.info("💡 Itt adhatod meg a raktárban talált fizikai mennyiséget. Ha eltérés van a rendszer és a fizikai készlet között, a rendszer automatikusan módosítja a készletet és elmenti a leltárkorrekciós naplóba.")
+    
+    if st.session_state.sarzs_keszlet.empty:
+        st.warning("Nincs leltározható készlet a raktárban.")
+    else:
+        sarzs_opciok = [f"{row['SarzsID']} | {row['Cikkszám']} - {row['Megnevezés']} (Tárhely: {row['Tárhely']})" for _, row in st.session_state.sarzs_keszlet.iterrows()]
+        
+        with st.form("leltar_form"):
+            kivalasztott_sarzs_str = st.selectbox("Válassz ki egy leltározandó Sarzsot / Tételt:", sarzs_opciok)
+            
+            selected_sarzs_id = kivalasztott_sarzs_str.split(" | ")[0]
+            aktualis_row = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["SarzsID"] == selected_sarzs_id].iloc[0]
+            
+            col_l1, col_l2, col_l3 = st.columns(3)
+            with col_l1:
+                st.write(f"**Tárhely:** `{aktualis_row['Tárhely']}`")
+                st.write(f"**Cikkszám:** `{aktualis_row['Cikkszám']}`")
+            with col_l2:
+                st.write(f"**Megnevezés:** {aktualis_row['Megnevezés']}")
+                st.write(f"**Jelenlegi Rendszer Készlet:** `{aktualis_row['Mennyiség']}`")
+            with col_l3:
+                uj_fizikai_mennyiseg = st.number_input("Számolt Fizikai Mennyiség:", min_value=0, value=int(aktualis_row['Mennyiség']))
+                
+            elteres = uj_fizikai_mennyiseg - aktualis_row['Mennyiség']
+            if elteres > 0:
+                st.success(f"📈 Többlet: +{elteres} db")
+            elif elteres < 0:
+                st.error(f"📉 Hiány: {elteres} db")
+            else:
+                st.info("⚖️ Nincs eltérés (0 db)")
+                
+            if st.form_submit_button("💾 Leltármódosítás Jóváhagyása"):
+                st.session_state.sarzs_keszlet.loc[st.session_state.sarzs_keszlet["SarzsID"] == selected_sarzs_id, "Mennyiség"] = uj_fizikai_mennyiseg
+                
+                # Naplózás
+                st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
+                    "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Művelet": "LELTÁR KORREKCIÓ",
+                    "Cikkszám": aktualis_row['Cikkszám'],
+                    "Megnevezés": aktualis_row['Megnevezés'],
+                    "Mennyiség": elteres,
+                    "SarzsID": selected_sarzs_id,
+                    "Tárhely": aktualis_row['Tárhely'],
+                    "Felhasználó": "Leltározó Raktáros",
+                    "ADR_Pont": 0
+                }])], ignore_index=True)
+                
+                # 0 mennyiségű sarzsok törlése
+                st.session_state.sarzs_keszlet = st.session_state.sarzs_keszlet[st.session_state.sarzs_keszlet["Mennyiség"] > 0]
+                
+                st.success(f"✅ Leltármódosítás elmentve! Új készlet ezen a sarzson: {uj_fizikai_mennyiseg}")
+                st.rerun()
+
+# ==========================================
+# 5. VONALKÓD GENERÁLÓ
+# ==========================================
+elif menu == "🏷️ Vonalkód Generáló":
+    st.header("🏷️ Vonalkód Címke Nyomtatás & Generálás")
+    
+    termek_lista = {f"{row['Cikkszám']} - {row['Megnevezés']}": row['Vonalkód'] for _, row in st.session_state.cikktorzs.iterrows()}
+    kivalasztott = st.selectbox("Válassz terméket a vonalkód generáláshoz:", list(termek_lista.keys()))
+    
+    v_kod = termek_lista[kivalasztott]
+    st.write(f"**Regisztrált Vonalkód számsor:** `{v_kod}`")
+    
+    img = generate_barcode_img(v_kod)
+    if img:
+        st.image(img, caption=f"Generált vonalkód: {v_kod}", width=300)
+    else:
+        st.error("Nem sikerült a vonalkódot elkészíteni.")
+
+# ==========================================
+# 6. ADR MODUL
+# ==========================================
+elif menu == "⚠️ ADR Veszélyes Áru Kezelés":
+    st.header("⚠️ ADR Veszélyes Áru Törzsadatok & Összeférhetőség")
+    
+    tab1, tab2 = st.tabs(["☣️ ADR Cikktörzs Nyilvántartás", "🔒 Tárhely Összeférhetőség"])
+    
+    with tab1:
+        st.subheader("Új ADR-es Termék Regisztrációja")
+        with st.form("adr_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                cikk = st.text_input("Cikkszám", value="ADR-903")
+                nev = st.text_input("Megnevezés", value="Akkumulátor Sav")
+                vonalkod = st.text_input("Vonalkód", value="5901234567899")
+                un_szam = st.text_input("UN-Szám", value="UN 2796")
+            with col2:
+                osztaly = st.selectbox("ADR Osztály", ["1 (Robbanó)", "2 (Gázok)", "3 (Gyúlékony)", "4.1 (Gyúlékony szilárd)", "5.1 (Oxidáló)", "6.1 (Mérgező)", "8 (Maró)", "9 (Egyéb)"])
+                pg = st.selectbox("Csomagolási Csoport (PG)", ["I (Nagyon veszélyes - Szorzó: 50)", "II (Közepesen veszélyes - Szorzó: 3)", "III (Kevésbé veszélyes - Szorzó: 1)"])
+                
+            if st.form_submit_button("ADR Termék Rögzítése"):
+                szorzo = 50 if "I " in pg else (3 if "II " in pg else 1)
+                uj_adr = {
+                    "Cikkszám": cikk, "Megnevezés": nev, "Vonalkód": vonalkod, "MinKeszlet": 10, "Is_ADR": True, 
+                    "UN_Szam": un_szam, "ADR_Osztaly": osztaly, "PG": pg.split(" ")[0], "ADR_Szorzo": szorzo
+                }
+                st.session_state.cikktorzs = pd.concat([st.session_state.cikktorzs, pd.DataFrame([uj_adr])], ignore_index=True)
+                st.success(f"✅ ADR Termék rögzítve: {nev} ({un_szam})")
+                st.rerun()
+
+        st.subheader("Jelenlegi ADR Cikktörzs")
+        adr_df = st.session_state.cikktorzs[st.session_state.cikktorzs["Is_ADR"] == True]
+        st.dataframe(adr_df, use_container_width=True)
+
+    with tab2:
+        st.warning("⚠️ **Biztonsági szabály:** Savak (Osztály 8) és Gyúlékony folyadékok (Osztály 3) nem kerülhetnek azonos közvetlen polcra!")
+
+# ==========================================
+# 7. NAPLÓ ÉS EXCEL EXPORT
+# ==========================================
 elif menu == "📜 Árumozgás Napló (Excel Export)":
     st.header("📜 Árumozgási Napló és Letöltés")
     
