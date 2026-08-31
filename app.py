@@ -219,7 +219,6 @@ elif menu == "📤 Összesített Kiadás & Komissiózás":
         osszes_adr_pont = df_kosar["ADR Pontszám"].sum()
 
         if st.button("✅ Kiadás Végrehajtása & Tárhely szerinti Komissiózási Lista"):
-            komissio_rows = ""
             for _, k_row in df_kosar.iterrows():
                 cikk = k_row["Cikkszám"]
                 igenyelt = k_row["Mennyiség"]
@@ -239,15 +238,6 @@ elif menu == "📤 Összesített Kiadás & Komissiózás":
                     levonando = min(row["Mennyiség"], maradek)
                     st.session_state.sarzs_keszlet.loc[st.session_state.sarzs_keszlet["SarzsID"] == row["SarzsID"], "Mennyiség"] -= levonando
                     maradek -= levonando
-                    
-                    komissio_rows += f"""
-                    <tr>
-                        <td style="border:1px solid #ccc; padding:8px;"><b>{row['Tárhely']}</b></td>
-                        <td style="border:1px solid #ccc; padding:8px;">{cikk} - {k_row['Megnevezés']} (Sarzs: {row['SarzsID']})</td>
-                        <td style="border:1px solid #ccc; padding:8px;">Lejárat: {row['Lejárat']}</td>
-                        <td style="border:1px solid #ccc; padding:8px; font-weight:bold; font-size:16px;">{levonando} db</td>
-                    </tr>
-                    """
                     
                     st.session_state.naplo = pd.concat([st.session_state.naplo, pd.DataFrame([{
                         "Dátum": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -308,7 +298,7 @@ elif menu == "📊 Leltár & Leltármódosítás":
 # ==========================================
 # 5. ABC KÉSZLET ELEMZÉS
 # ==========================================
-elif menu == "📈 ABC KÉSZLET ELEMZÉS":
+elif menu == "📈 ABC Készlet Elemzés":
     st.header("📈 ABC Készlet Elemzés (Pareto elv 80/15/5%)")
     
     if not st.session_state.sarzs_keszlet.empty:
@@ -384,4 +374,4 @@ elif menu == "📜 Árumozgás Napló (Excel Export)":
         data=buffer,
         file_name=f"WMS_Naplo_{datetime.date.today()}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    ))
+    )
